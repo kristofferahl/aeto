@@ -37,9 +37,9 @@ var _ = Describe("ResourceTemplate Controller", func() {
 	const interval = time.Second * 1
 
 	const resourceName = "test-resource-template"
-	const operatorNamespace = "default"
+	const namespace = "default"
 
-	Context("ResourceTemplate with valid template", func() {
+	Context("ResourceTemplate with valid spec", func() {
 		It("Should handle reconcile correctly", func() {
 			spec := corev1alpha1.ResourceTemplateSpec{
 				Raw: []string{
@@ -69,7 +69,7 @@ var _ = Describe("ResourceTemplate Controller", func() {
 
 			key := types.NamespacedName{
 				Name:      resourceName,
-				Namespace: operatorNamespace,
+				Namespace: namespace,
 			}
 
 			toCreate := &corev1alpha1.ResourceTemplate{
