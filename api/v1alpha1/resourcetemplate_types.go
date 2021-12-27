@@ -28,8 +28,13 @@ type ResourceTemplateSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of ResourceTemplate. Edit resourcetemplate_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Manifests contains embedded resources in go templating format
+	// +kubebuilder:validation:Optional
+	Manifests []EmbeddedResource `json:"manifests,omitempty"`
+
+	// Raw contains raw yaml documents in go templating format (prefer using Manifests over Raw)
+	// +kubebuilder:validation:Optional
+	Raw []string `json:"raw,omitempty"`
 }
 
 // ResourceTemplateStatus defines the observed state of ResourceTemplate

@@ -1,0 +1,25 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: ResourceTemplate
+metadata:
+  name: default-namespace-template
+spec:
+  raw:
+    - |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: {{ .Namespace }}
+      labels:
+        app.net/tenant: "{{ .Key }}"
+      annotations:
+        aeto.net/controlled: true
+  manifests:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "fixed-name"
+        labels:
+          aeto.net/other: "test"
+        annotations:
+          aeto.net/controlled: "{{ params.Key }}"
+      spec: {}

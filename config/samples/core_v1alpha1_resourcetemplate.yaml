@@ -3,4 +3,13 @@ kind: ResourceTemplate
 metadata:
   name: resourcetemplate-sample
 spec:
-  # Add fields here
+  raw:
+    - |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: {{ .Namespace }}
+      labels:
+        app.kubernetes.io/tenant: "{{ .Key }}"
+      annotations:
+        aeto.net/controlled: true
