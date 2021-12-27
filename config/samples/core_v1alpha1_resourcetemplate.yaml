@@ -1,0 +1,6 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: ResourceTemplate
+metadata:
+  name: resourcetemplate-sample
+spec:
+  # Add fields here
