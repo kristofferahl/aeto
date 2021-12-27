@@ -32,3 +32,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - tenants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - tenants/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - tenants/status
+  verbs:
+  - get
+  - patch
+  - update

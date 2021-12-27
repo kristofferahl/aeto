@@ -16,4 +16,13 @@ resources:
   kind: ResourceTemplate
   path: github.com/kristofferahl/aeto/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: aeto.net
+  group: core
+  kind: Tenant
+  path: github.com/kristofferahl/aeto/api/v1alpha1
+  version: v1alpha1
 version: "3"
