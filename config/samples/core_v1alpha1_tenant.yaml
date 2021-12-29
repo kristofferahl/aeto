@@ -3,4 +3,4 @@ kind: Tenant
 metadata:
   name: tenant-sample
 spec:
-  # Add fields here
+  name: "Tenant sample"

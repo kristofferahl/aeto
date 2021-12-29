@@ -36,8 +36,14 @@ spec:
           spec:
             description: ResourceTemplateSpec defines the desired state of ResourceTemplate
             properties:
-              manifests:
-                description: Manifests contains embedded resources in go templating
+              raw:
+                description: Raw contains raw yaml documents in go templating format
+                  (prefer using Manifests over Raw)
+                items:
+                  type: string
+                type: array
+              resources:
+                description: Resources contains embedded resources in go templating
                   format
                 items:
                   description: EmbeddedResource holds a kubernetes resource
@@ -45,12 +51,22 @@ spec:
                   x-kubernetes-embedded-resource: true
                   x-kubernetes-preserve-unknown-fields: true
                 type: array
-              raw:
-                description: Raw contains raw yaml documents in go templating format
-                  (prefer using Manifests over Raw)
-                items:
-                  type: string
-                type: array
+              rules:
+                description: Rules contains embedded resources in go templating format
+                properties:
+                  name:
+                    default: tenant
+                    description: Name defines the naming rule to apply for the resources
+                      in the ResourceTemplate
+                    type: string
+                  namespace:
+                    default: tenant
+                    description: Namespace defines the namespace source to use for
+                      the resources in the ResourceTemplate
+                    type: string
+                type: object
+            required:
+            - rules
             type: object
           status:
             description: ResourceTemplateStatus defines the observed state of ResourceTemplate

@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -29,6 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	testfactory "github.com/kristofferahl/aeto/internal/pkg/testing"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
 	//+kubebuilder:scaffold:imports
@@ -74,6 +77,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
+	setupDefaultResources("default")
 }, 60)
 
 var _ = AfterSuite(func() {
@@ -81,3 +85,8 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+func setupDefaultResources(namespace string) {
+	defaultNamespaceTemplate, _ := testfactory.CreateNamespaceTemplate(namespace, "default-namespace-template")
+	Expect(k8sClient.Create(context.Background(), defaultNamespaceTemplate)).Should(Succeed())
+}

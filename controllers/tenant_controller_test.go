@@ -24,34 +24,33 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
-	"github.com/kristofferahl/aeto/internal/pkg/testing"
+	testing "github.com/kristofferahl/aeto/internal/pkg/testing"
 )
 
-var _ = Describe("ResourceTemplate Controller", func() {
+var _ = Describe("Tenant Controller", func() {
 
 	const timeout = time.Second * 30
 	const interval = time.Second * 1
 
-	const resourceName = "test-resource-template"
+	const resourceName = "test-tenant"
 	const namespace = "default"
 
-	Context("ResourceTemplate with valid spec", func() {
+	Context("Tenant with valid spec", func() {
 		It("Should handle reconcile correctly", func() {
-			toCreate, key := testing.CreateNamespaceTemplate(namespace, resourceName)
+			toCreate, key := testing.CreateTenant(namespace, resourceName)
 
-			By("Creating the ResourceTemplate successfully")
+			By("Creating the Tenant successfully")
 			Expect(k8sClient.Create(context.Background(), toCreate)).Should(Succeed())
 			time.Sleep(time.Second * 5)
 
-			fetched := &corev1alpha1.ResourceTemplate{}
+			fetched := &corev1alpha1.Tenant{}
 			Eventually(func() bool {
 				k8sClient.Get(context.Background(), key, fetched)
 				return fetched != nil
 			}, timeout, interval).Should(BeTrue())
 
 			Expect(fetched.Generation).To(BeEquivalentTo(1))
-			Expect(len(fetched.Spec.Resources)).To(BeEquivalentTo(1))
-			Expect(len(fetched.Spec.Raw)).To(BeEquivalentTo(1))
+			Expect(fetched.Spec.Name).To(Equal("Tenant name"))
 		})
 	})
 })

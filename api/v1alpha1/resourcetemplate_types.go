@@ -23,19 +23,49 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	ResourceNameKeep   ResourceNameRule = "keep"
+	ResourceNameTenant ResourceNameRule = "tenant"
+
+	ResourceNamespaceKeep     ResourceNamespaceRule = "keep"
+	ResourceNamespaceTenant   ResourceNamespaceRule = "tenant"
+	ResourceNamespaceOperator ResourceNamespaceRule = "operator"
+)
+
 // ResourceTemplateSpec defines the desired state of ResourceTemplate
 type ResourceTemplateSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Manifests contains embedded resources in go templating format
+	// Rules contains embedded resources in go templating format
+	// +kubebuilder:validation:Required
+	Rules ResourceTemplateRules `json:"rules"`
+
+	// Resources contains embedded resources in go templating format
 	// +kubebuilder:validation:Optional
-	Manifests []EmbeddedResource `json:"manifests,omitempty"`
+	Resources []EmbeddedResource `json:"resources,omitempty"`
 
 	// Raw contains raw yaml documents in go templating format (prefer using Manifests over Raw)
 	// +kubebuilder:validation:Optional
 	Raw []string `json:"raw,omitempty"`
 }
+
+// ResourceTemplateRules defines rules of the ResourceTemplate
+type ResourceTemplateRules struct {
+	// Name defines the naming rule to apply for the resources in the ResourceTemplate
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=tenant
+	Name ResourceNameRule `json:"name"`
+
+	// Namespace defines the namespace source to use for the resources in the ResourceTemplate
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=tenant
+	Namespace ResourceNamespaceRule `json:"namespace"`
+}
+
+type ResourceNamespaceRule string
+
+type ResourceNameRule string
 
 // ResourceTemplateStatus defines the observed state of ResourceTemplate
 type ResourceTemplateStatus struct {

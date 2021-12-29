@@ -3,13 +3,15 @@ kind: ResourceTemplate
 metadata:
   name: resourcetemplate-sample
 spec:
-  raw:
-    - |-
-      apiVersion: v1
+  rules:
+    name: tenant
+    namespace: tenant
+  resources:
+    - apiVersion: v1
       kind: Namespace
       metadata:
-        name: {{ .Namespace }}
-      labels:
-        app.kubernetes.io/tenant: "{{ .Key }}"
-      annotations:
-        aeto.net/controlled: true
+        name: "injected"
+        labels:
+          app.net/tenant: "injected"
+        annotations:
+          aeto.net/controlled: "injected"

@@ -3,23 +3,15 @@ kind: ResourceTemplate
 metadata:
   name: default-namespace-template
 spec:
-  raw:
-    - |-
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: {{ .Namespace }}
-      labels:
-        app.net/tenant: "{{ .Key }}"
-      annotations:
-        aeto.net/controlled: true
-  manifests:
+  rules:
+    name: tenant
+    namespace: tenant
+  resources:
     - apiVersion: v1
       kind: Namespace
       metadata:
-        name: "fixed-name"
+        name: "injected"
         labels:
-          aeto.net/other: "test"
+          app.net/tenant: "injected"
         annotations:
-          aeto.net/controlled: "{{ params.Key }}"
-      spec: {}
+          aeto.net/controlled: "injected"
