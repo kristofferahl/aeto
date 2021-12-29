@@ -66,6 +66,8 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	rctx := NewReconcileContext("tenant", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
+	// TODO: Review log levels
+
 	tenant, err := r.getTenant(rctx)
 	if err != nil {
 		rctx.Log.Info("Tenant not found")
@@ -99,8 +101,10 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, tenant corev1alpha1.Tenant, resourceTemplateName string) ([]*unstructured.Unstructured, error) {
 	rt, err := r.getResourceTemplate(rctx, operatorNamespace, resourceTemplateName)
 	if err != nil {
+		rctx.Log.Info("ResourceTemplate not found")
 		return nil, err
 	}
+	rctx.Log.V(1).Info("found ResourceTemplate")
 
 	// TODO: Copy labels and annotations from Tenant?
 	commonLabels := map[string]string{
@@ -134,8 +138,10 @@ func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, te
 
 	allResources := make([]*unstructured.Unstructured, 0)
 
+	rctx.Log.V(1).Info("building resources from resource template", "template", resourceTemplateName)
+
 	for _, raw := range rt.Spec.Raw {
-		templated, err := applyTemplate(rctx, raw, tmplData)
+		templated, err := executeTemplate(rctx, raw, tmplData)
 		if err != nil {
 			return nil, err
 		}
@@ -146,8 +152,6 @@ func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, te
 		}
 
 		for _, doc := range docs {
-			rctx.Log.Info("converting raw to unstructured", "resource", doc)
-
 			templatedResources, err := convert.YamlToUnstructuredSlice(doc)
 			if err != nil {
 				return nil, err
@@ -158,7 +162,7 @@ func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, te
 	}
 
 	for _, resource := range rt.Spec.Resources {
-		templated, err := applyTemplate(rctx, string(resource.Raw), tmplData)
+		templated, err := executeTemplate(rctx, string(resource.Raw), tmplData)
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +178,7 @@ func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, te
 	// TODO: Set manager field
 	// TODO: Set ownerReference
 
-	rctx.Log.Info("applying changes to resources", "count", len(allResources))
+	rctx.Log.V(1).Info("applying name, namespace and common labels/annotations to resources", "template", resourceTemplateName)
 	for _, resource := range allResources {
 		resourceName := ""
 		resourceNamespace := ""
@@ -209,13 +213,13 @@ func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, te
 		resource.SetLabels(commonLabels)
 		resource.SetAnnotations(commonAnnotations)
 
-		rctx.Log.Info("all changes applied to resource", "resource", resource.UnstructuredContent())
+		rctx.Log.V(1).Info("all changes applied to resource", "template", resourceTemplateName, "resource", resource.UnstructuredContent())
 	}
 
 	return allResources, nil
 }
 
-func applyTemplate(ctx ReconcileContext, tmpl string, data interface{}) (string, error) {
+func executeTemplate(ctx ReconcileContext, tmpl string, data interface{}) (string, error) {
 	t, err := template.New("resource").Parse(tmpl)
 	if err != nil {
 		ctx.Log.Error(err, "failed to parse template")
