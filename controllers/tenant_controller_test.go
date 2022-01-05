@@ -37,7 +37,7 @@ var _ = Describe("Tenant Controller", func() {
 
 	Context("Tenant with valid spec", func() {
 		It("Should handle reconcile correctly", func() {
-			toCreate, key := testing.CreateTenant(namespace, resourceName)
+			toCreate, key := testing.NewTenant(namespace, resourceName)
 
 			By("Creating the Tenant successfully")
 			Expect(k8sClient.Create(context.Background(), toCreate)).Should(Succeed())

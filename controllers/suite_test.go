@@ -87,6 +87,6 @@ var _ = AfterSuite(func() {
 })
 
 func setupDefaultResources(namespace string) {
-	defaultNamespaceTemplate, _ := testfactory.CreateNamespaceTemplate(namespace, "default-namespace-template")
+	defaultNamespaceTemplate, _ := testfactory.NewNamespaceTemplate(namespace, "default-namespace-template")
 	Expect(k8sClient.Create(context.Background(), defaultNamespaceTemplate)).Should(Succeed())
 }

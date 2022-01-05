@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func CreateTenant(namespace string, name string) (*corev1alpha1.Tenant, types.NamespacedName) {
+func NewTenant(namespace string, name string) (*corev1alpha1.Tenant, types.NamespacedName) {
 	spec := corev1alpha1.TenantSpec{
 		Name: "Tenant name",
 	}
@@ -28,7 +28,7 @@ func CreateTenant(namespace string, name string) (*corev1alpha1.Tenant, types.Na
 	}, key
 }
 
-func CreateNamespaceTemplate(namespace string, name string) (*corev1alpha1.ResourceTemplate, types.NamespacedName) {
+func NewNamespaceTemplate(namespace string, name string) (*corev1alpha1.ResourceTemplate, types.NamespacedName) {
 	spec := corev1alpha1.ResourceTemplateSpec{
 		Rules: corev1alpha1.ResourceTemplateRules{
 			Name:      corev1alpha1.ResourceNameTenant,

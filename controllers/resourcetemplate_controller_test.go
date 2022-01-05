@@ -37,7 +37,7 @@ var _ = Describe("ResourceTemplate Controller", func() {
 
 	Context("ResourceTemplate with valid spec", func() {
 		It("Should handle reconcile correctly", func() {
-			toCreate, key := testing.CreateNamespaceTemplate(namespace, resourceName)
+			toCreate, key := testing.NewNamespaceTemplate(namespace, resourceName)
 
 			By("Creating the ResourceTemplate successfully")
 			Expect(k8sClient.Create(context.Background(), toCreate)).Should(Succeed())
