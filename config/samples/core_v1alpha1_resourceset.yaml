@@ -1,0 +1,6 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: ResourceSet
+metadata:
+  name: resourceset-sample
+spec:
+  # Add fields here

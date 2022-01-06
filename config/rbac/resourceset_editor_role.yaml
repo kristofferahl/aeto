@@ -1,0 +1,24 @@
+# permissions for end users to edit resourcesets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: resourceset-editor-role
+rules:
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - resourcesets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - resourcesets/status
+  verbs:
+  - get
