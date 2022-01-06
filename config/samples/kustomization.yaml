@@ -2,4 +2,5 @@
 resources:
 - core_v1alpha1_resourcetemplate.yaml
 - core_v1alpha1_tenant.yaml
+- core_v1alpha1_blueprint.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
