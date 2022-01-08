@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/convert"
 	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
@@ -44,8 +45,6 @@ var (
 		Version: "v1",
 		Kind:    "Namespace",
 	}
-
-	operatorNamespace = "aeto" // TODO: Get operator namespace (from config?)
 )
 
 // TenantReconciler reconciles a Tenant object
@@ -84,7 +83,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	rctx.Log.V(1).Info("found Tenant")
 
 	blueprintRef := types.NamespacedName{
-		Namespace: operatorNamespace,
+		Namespace: config.Operator.Namespace,
 		Name:      tenant.Blueprint(),
 	}
 	blueprint, err := r.getBlueprint(rctx, blueprintRef)
@@ -122,7 +121,7 @@ func (r *TenantReconciler) newResourceSet(ctx reconcile.Context, tenant corev1al
 	resourceSet = corev1alpha1.ResourceSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        tenant.Name,
-			Namespace:   operatorNamespace,
+			Namespace:   config.Operator.Namespace,
 			Labels:      blueprint.CommonLabels(tenant),
 			Annotations: blueprint.CommonAnnotations(tenant),
 		},
@@ -167,7 +166,7 @@ func (r *TenantReconciler) newResourceSet(ctx reconcile.Context, tenant corev1al
 
 func (r *TenantReconciler) generateResourcesFromBlueprintResourceGroup(rctx reconcile.Context, resourceGroup corev1alpha1.BlueprintResourceGroup, tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint, resourceSet corev1alpha1.ResourceSet) ([]*unstructured.Unstructured, error) {
 	rtRef := types.NamespacedName{
-		Namespace: operatorNamespace,
+		Namespace: config.Operator.Namespace,
 		Name:      resourceGroup.Template,
 	}
 	rt, err := r.getResourceTemplate(rctx, rtRef)
@@ -180,13 +179,13 @@ func (r *TenantReconciler) generateResourcesFromBlueprintResourceGroup(rctx reco
 	resolver := ValueResolver{
 		TenantName:        blueprint.Spec.ResourceNamePrefix + tenant.Name, // TODO: This should probably be done in a single place
 		TenantNamespace:   blueprint.Spec.ResourceNamePrefix + tenant.Name, // TODO: This should probably be done in a single place
-		OperatorNamespace: operatorNamespace,
+		OperatorNamespace: config.Operator.Namespace,
 		ResourceSet:       resourceSet,
 		Dynamic:           r.Dynamic,
 		Context:           rctx,
 	}
 
-	rctx.Log.Info("applying parameter overrides")
+	rctx.Log.V(1).Info("applying parameter overrides")
 	err = rt.Spec.Parameters.SetValues(resourceGroup.Parameters, resolver.Func)
 	if err != nil {
 		return nil, err
@@ -227,7 +226,7 @@ func (r *TenantReconciler) generateResourcesFromBlueprintResourceGroup(rctx reco
 
 		switch rt.Spec.Rules.Namespace {
 		case corev1alpha1.ResourceNamespaceOperator:
-			resourceNamespace = operatorNamespace
+			resourceNamespace = config.Operator.Namespace
 		case corev1alpha1.ResourceNamespaceTenant:
 			resourceNamespace = blueprint.Spec.ResourceNamePrefix + tenant.Name
 		case corev1alpha1.ResourceNamespaceKeep:
@@ -267,7 +266,7 @@ func newTemplateData(tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprin
 		Name: tenant.Spec.Name,
 		Namespaces: templating.Namespaces{
 			Tenant:   blueprint.Spec.ResourceNamePrefix + tenant.Name,
-			Operator: operatorNamespace,
+			Operator: config.Operator.Namespace,
 		},
 		Labels:      blueprint.CommonLabels(tenant),
 		Annotations: blueprint.CommonAnnotations(tenant),
@@ -360,7 +359,7 @@ func (r *TenantReconciler) applyResourceSet(ctx reconcile.Context, resourceSet c
 
 	if existing != nil {
 		existing.Spec.Groups = resourceSet.Spec.Groups
-		ctx.Log.Info("updating ResourceSet", "resourceset", resourceSet.NamespacedName())
+		ctx.Log.V(1).Info("updating ResourceSet", "resourceset", resourceSet.NamespacedName())
 		err := r.Update(ctx.Context, existing)
 		if err != nil {
 			ctx.Log.Error(err, "failed to update ResourceSet", "resourceset", resourceSet.NamespacedName())

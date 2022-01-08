@@ -15,7 +15,6 @@ type Context struct {
 	Request ctrl.Request
 	Context context.Context
 	Log     logr.Logger
-	Config  config.OperatorConfig
 }
 
 // NewContext creates a new context
@@ -26,9 +25,6 @@ func NewContext(name string, req ctrl.Request, log logr.Logger) Context {
 		Context: context.Background(),
 		Log:     log.WithValues("cid", cid),
 		Request: req,
-		Config: config.OperatorConfig{
-			ReconcileInterval: time.Second * 60,
-		},
 	}
 }
 
@@ -59,6 +55,6 @@ func (ctx Context) Complete(results ...Result) (ctrl.Result, error) {
 		}
 	}
 
-	ctx.Log.Info("finished reconciliation", "requeue-interval", ctx.Config.ReconcileInterval)
-	return ctrl.Result{RequeueAfter: ctx.Config.ReconcileInterval}, nil
+	ctx.Log.Info("finished reconciliation", "requeue-interval", config.Operator.ReconcileInterval)
+	return ctrl.Result{RequeueAfter: config.Operator.ReconcileInterval}, nil
 }

@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -26,6 +27,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/kristofferahl/aeto/internal/pkg/config"
 	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -55,18 +57,36 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+
+	var operatorNamespace string
+	var operatorReconcileInterval time.Duration
+
+	// Kubebuilder flags
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
 
+	// Operator flags
+	flag.StringVar(&operatorNamespace, "operator-namespace", "aeto", "The operator namespace.")
+	flag.DurationVar(&operatorReconcileInterval, "operator-reconcile-interval", 1*time.Minute, "The interval of the reconciliation loop")
+
+	// Parse flags
+	flag.Parse()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Operator environment overrides
+	operatorNamespace = config.StringEnvVar("OPERATOR_NAMESPACE", operatorNamespace)
+	operatorReconcileInterval = config.DurationEnvVar("OPERATOR_RECONCILE_INTERVAL", operatorReconcileInterval)
+
+	// Configure operator
+	config.Operator = config.OperatorConfig{
+		ReconcileInterval: operatorReconcileInterval,
+		Namespace:         operatorNamespace,
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

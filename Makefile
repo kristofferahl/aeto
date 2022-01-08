@@ -53,6 +53,12 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Zap Log level to use when running make run
+ZAP_LOG_LEVEL = debug
+
+# Run Zap in development mode
+ZAP_DEVEL = true
+
 all: build
 
 ##@ General
@@ -94,7 +100,7 @@ build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go
+	go run ./main.go --zap-devel=$(ZAP_DEVEL) --zap-log-level=$(ZAP_LOG_LEVEL)
 
 docker-build: test ## Build docker image with the manager.
 	docker build -t ${IMG} .
