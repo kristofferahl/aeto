@@ -1,0 +1,38 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: ResourceTemplate
+metadata:
+  name: default-limit-range-template
+spec:
+  rules:
+    name: keep
+    namespace: tenant
+  parameters:
+    - name: DefaultCpuRequest
+      default: 50m
+    - name: DefaultMemoryRequest
+      default: 50Mi
+    - name: DefaultCpuLimit
+      default: 100m
+    - name: DefaultMemoryLimit
+      default: 100Mi
+    - name: MaxCpu
+      default: 1000m
+    - name: MaxMemory
+      default: 2000Mi
+  resources:
+    - apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: "{{ .Key }}-compute-limits"
+      spec:
+        limits:
+          - type: Container
+            defaultRequest:
+              cpu: '{{ .String "DefaultCpuRequest" }}'
+              memory: '{{ .String "DefaultMemoryRequest" }}'
+            default:
+              cpu: '{{ .String "DefaultCpuLimit" }}'
+              memory: '{{ .String "DefaultMemoryLimit" }}'
+            max:
+              cpu: '{{ .String "MaxCpu" }}'
+              memory: '{{ .String "MaxMemory" }}'

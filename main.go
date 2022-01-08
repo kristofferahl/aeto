@@ -22,8 +22,11 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -78,16 +81,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.ResourceTemplateReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ResourceTemplate")
+	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create dynamic client")
 		os.Exit(1)
 	}
+
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create dynamic client")
+		os.Exit(1)
+	}
+
+	dynamicClients := dyn.Clients{
+		DynamicClient:   dynamicClient,
+		DiscoveryClient: discoveryClient,
+	}
+
 	if err = (&controllers.TenantReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Dynamic:  dynamicClients,
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("tenant-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Tenant")
 		os.Exit(1)
@@ -99,9 +114,17 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Blueprint")
 		os.Exit(1)
 	}
-	if err = (&controllers.ResourceSetReconciler{
+	if err = (&controllers.ResourceTemplateReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ResourceTemplate")
+		os.Exit(1)
+	}
+	if err = (&controllers.ResourceSetReconciler{
+		Client:  mgr.GetClient(),
+		Dynamic: dynamicClients,
+		Scheme:  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ResourceSet")
 		os.Exit(1)

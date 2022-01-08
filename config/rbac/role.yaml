@@ -9,6 +9,58 @@ rules:
 - apiGroups:
   - core.aeto.net
   resources:
+  - blueprints
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - blueprints/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - blueprints/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - resourcesets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - resourcesets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.aeto.net
+  resources:
+  - resourcesets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - core.aeto.net
+  resources:
   - resourcetemplates
   verbs:
   - create

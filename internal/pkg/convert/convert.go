@@ -45,7 +45,7 @@ func YamlToUnstructuredSlice(source string) ([]*unstructured.Unstructured, error
 	return objs, firstErr
 }
 
-// YamlToStringSlice splits a YAML document into byte slices objects
+// YamlToStringSlice splits a YAML document into string slices objects
 func YamlToStringSlice(source string) ([]string, error) {
 	dec := yaml.NewDecoder(bytes.NewReader([]byte(source)))
 

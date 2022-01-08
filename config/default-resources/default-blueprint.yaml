@@ -1,0 +1,18 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: Blueprint
+metadata:
+  name: default
+spec:
+  resourceNamePrefix: tenant-
+  resources:
+    - name: namespace
+      template: default-namespace-template
+    - name: network_policy
+      template: default-network-policy-template
+    - name: limit_range
+      template: default-limit-range-template
+      parameters:
+        - name: DefaultCpuLimit
+          value: 200m
+        - name: DefaultMemoryLimit
+          value: 200Mi

@@ -6,6 +6,7 @@ spec:
   rules:
     name: tenant
     namespace: tenant
+  parameters: []
   resources:
     - apiVersion: v1
       kind: Namespace

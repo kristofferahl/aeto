@@ -1,6 +1,0 @@
-apiVersion: core.aeto.net/v1alpha1
-kind: Blueprint
-metadata:
-  name: blueprint-sample
-spec:
-  # Add fields here

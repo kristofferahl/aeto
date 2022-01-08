@@ -1,3 +1,5 @@
 resources:
+  - default-blueprint.yaml
   - default-namespace-template.yaml
   - default-network-policy-template.yaml
+  - default-limit-range-template.yaml

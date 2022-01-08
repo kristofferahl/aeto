@@ -1,0 +1,146 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: blueprints.core.aeto.net
+spec:
+  group: core.aeto.net
+  names:
+    kind: Blueprint
+    listKind: BlueprintList
+    plural: blueprints
+    singular: blueprint
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Blueprint is the Schema for the blueprints API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BlueprintSpec defines the desired state of Blueprint
+            properties:
+              resourceNamePrefix:
+                description: ResourceNamePrefix defines the prefix to use when naming
+                  resources
+                type: string
+              resources:
+                description: Resources defines the resources groups used when generating
+                  tenant resource sets
+                items:
+                  description: BlueprintResourceGroup defines a group of resources
+                    used when generating tenant resource sets
+                  properties:
+                    name:
+                      description: Name defines the name of the resource group
+                      type: string
+                    parameters:
+                      description: Parameters defines the parameters that applies
+                        to the template
+                      items:
+                        description: ParameterValue defines a template parameter
+                        properties:
+                          name:
+                            description: Name defines the name of the parameter
+                            type: string
+                          value:
+                            description: Value holds a value for the parameter
+                            type: string
+                          valueFrom:
+                            description: ValueFrom holds a value for the parameter
+                            properties:
+                              blueprint:
+                                description: Blueprint defines a reference to a value
+                                  from a blueprint resource group
+                                properties:
+                                  jsonPath:
+                                    description: JsonPath holds a path expression
+                                      for the desired value
+                                    type: string
+                                  resourceGroup:
+                                    description: ResourceGroup defines the resource
+                                      group
+                                    type: string
+                                required:
+                                - jsonPath
+                                - resourceGroup
+                                type: object
+                              resource:
+                                description: Resource defines a reference to a value
+                                  from a kubernetes resource
+                                properties:
+                                  apiVersion:
+                                    description: ApiVersion defines the api version
+                                      of the kubernetes resource
+                                    type: string
+                                  jsonPath:
+                                    description: JsonPath holds a path expression
+                                      for the desired value
+                                    type: string
+                                  kind:
+                                    description: Kind defines the kind of the kubernetes
+                                      resource
+                                    type: string
+                                  name:
+                                    description: Name defines the name of the kubernetes
+                                      resource
+                                    type: string
+                                  namespace:
+                                    description: Namespace defines the namespace of
+                                      the kubernetes resource
+                                    type: string
+                                required:
+                                - apiVersion
+                                - jsonPath
+                                - kind
+                                - name
+                                - namespace
+                                type: object
+                            type: object
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    template:
+                      description: Template defines the namespace/name of the template
+                        used to generate resources
+                      type: string
+                  required:
+                  - name
+                  - template
+                  type: object
+                type: array
+            required:
+            - resourceNamePrefix
+            - resources
+            type: object
+          status:
+            description: BlueprintStatus defines the observed state of Blueprint
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

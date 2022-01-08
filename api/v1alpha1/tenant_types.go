@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -31,16 +32,27 @@ type TenantSpec struct {
 	// Name is the display name of the tenant
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
+
+	// Blueprint contains the name of the Blueprint to use for the tenant
+	// +kubebuilder:validation:Optional
+	Blueprint string `json:"blueprint,omitempty"`
 }
 
 // TenantStatus defines the observed state of Tenant
 type TenantStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	Blueprint string `json:"blueprint,omitempty"`
+
+	ResourceSet string `json:"resourceSet,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Tenant",priority=0,type="string",JSONPath=".spec.name",description="The name of the tenant"
+//+kubebuilder:printcolumn:name="Blueprint",priority=1,type="string",JSONPath=".status.blueprint",description="Blueprint namespace/name and version"
+//+kubebuilder:printcolumn:name="ResourceSet",priority=1,type="string",JSONPath=".status.resourceSet",description="ResourceSet namespace/name and version"
 
 // Tenant is the Schema for the tenants API
 type Tenant struct {
@@ -58,6 +70,22 @@ type TenantList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Tenant `json:"items"`
+}
+
+// Blueprint returns the name of the blueprint to use for generating tenant resources
+func (t *Tenant) Blueprint() string {
+	if t.Spec.Blueprint != "" {
+		return t.Spec.Blueprint
+	}
+	return "default"
+}
+
+// NamespacedName returns a namespaced name fot the custom resource
+func (t Tenant) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: t.Namespace,
+		Name:      t.Name,
+	}
 }
 
 func init() {

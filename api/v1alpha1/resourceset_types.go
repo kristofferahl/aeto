@@ -17,7 +17,12 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/PaesslerAG/jsonpath"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -28,8 +33,24 @@ type ResourceSetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of ResourceSet. Edit resourceset_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Groups contains grouped resources
+	// +kubebuilder:validation:Required
+	Groups []ResourceSetResourceGroup `json:"groups"`
+}
+
+// ResourceSetResourceGroup defines a grouped set of resources, generated from a resource template
+type ResourceSetResourceGroup struct {
+	// Name holds the name of the resource group
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// SourceTemplate contains a reference to the template used to genererate the resource group
+	// +kubebuilder:validation:Required
+	SourceTemplate string `json:"sourceTemplate"`
+
+	// Resources contains embedded resources
+	// +kubebuilder:validation:Required
+	Resources []EmbeddedResource `json:"resources"`
 }
 
 // ResourceSetStatus defines the observed state of ResourceSet
@@ -57,6 +78,42 @@ type ResourceSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ResourceSet `json:"items"`
+}
+
+// Group returns a resource group matching the specified name
+func (rs ResourceSet) Group(name string) (*ResourceSetResourceGroup, error) {
+	for _, group := range rs.Spec.Groups {
+		if group.Name == name {
+			return &group, nil
+		}
+	}
+	return nil, fmt.Errorf("resource group %s not found", name)
+}
+
+// JsonPath returns a value from the resource group JSON representation using the given path
+func (g *ResourceSetResourceGroup) JsonPath(path string) (string, error) {
+	bytes, err := json.Marshal(g)
+	if err != nil {
+		return "", err
+	}
+
+	v := interface{}(nil)
+	json.Unmarshal(bytes, &v)
+
+	value, err := jsonpath.Get(fmt.Sprintf("$%s", path), v)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%s", value), nil
+}
+
+// NamespacedName returns a namespaced name fot the custom resource
+func (rs ResourceSet) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: rs.Namespace,
+		Name:      rs.Name,
+	}
 }
 
 func init() {

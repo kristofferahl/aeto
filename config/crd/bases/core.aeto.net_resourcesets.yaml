@@ -1,0 +1,82 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: resourcesets.core.aeto.net
+spec:
+  group: core.aeto.net
+  names:
+    kind: ResourceSet
+    listKind: ResourceSetList
+    plural: resourcesets
+    singular: resourceset
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ResourceSet is the Schema for the resourcesets API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ResourceSetSpec defines the desired state of ResourceSet
+            properties:
+              groups:
+                description: Groups contains grouped resources
+                items:
+                  description: ResourceSetResourceGroup defines a grouped set of resources,
+                    generated from a resource template
+                  properties:
+                    name:
+                      description: Name holds the name of the resource group
+                      type: string
+                    resources:
+                      description: Resources contains embedded resources
+                      items:
+                        description: EmbeddedResource holds a kubernetes resource
+                        type: object
+                        x-kubernetes-embedded-resource: true
+                        x-kubernetes-preserve-unknown-fields: true
+                      type: array
+                    sourceTemplate:
+                      description: SourceTemplate contains a reference to the template
+                        used to genererate the resource group
+                      type: string
+                  required:
+                  - name
+                  - resources
+                  - sourceTemplate
+                  type: object
+                type: array
+            required:
+            - groups
+            type: object
+          status:
+            description: ResourceSetStatus defines the observed state of ResourceSet
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

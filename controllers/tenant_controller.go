@@ -17,19 +17,25 @@ limitations under the License.
 package controllers
 
 import (
-	"bytes"
 	"context"
-	"text/template"
+	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/convert"
+	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
+	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
+	templating "github.com/kristofferahl/aeto/internal/pkg/template"
 )
 
 var (
@@ -39,14 +45,15 @@ var (
 		Kind:    "Namespace",
 	}
 
-	operatorNamespace   = "default" // TODO: Get operator namespace (from config?)
-	blueprintNamePrefix = "prefix-" // TODO: Get from blueprint
+	operatorNamespace = "aeto" // TODO: Get operator namespace (from config?)
 )
 
 // TenantReconciler reconciles a Tenant object
 type TenantReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Dynamic  dynamic.Clients
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=core.aeto.net,resources=tenants,verbs=get;list;watch;create;update;patch;delete
@@ -63,10 +70,8 @@ type TenantReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	rctx := NewReconcileContext("tenant", req, log.FromContext(ctx))
+	rctx := reconcile.NewContext("tenant", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
-
-	// TODO: Review log levels
 
 	tenant, err := r.getTenant(rctx)
 	if err != nil {
@@ -78,107 +83,144 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	rctx.Log.V(1).Info("found Tenant")
 
-	resources := make([]*unstructured.Unstructured, 0)
-
-	// TODO: How do we keep track of the tenant namespace name?
-	res, err := r.createResourcesFromTemplate(rctx, tenant, "default-namespace-template")
+	blueprintRef := types.NamespacedName{
+		Namespace: operatorNamespace,
+		Name:      tenant.Blueprint(),
+	}
+	blueprint, err := r.getBlueprint(rctx, blueprintRef)
 	if err != nil {
+		rctx.Log.Info("Blueprint not found", "blueprint", blueprintRef.String())
 		return ctrl.Result{}, err
 	}
-	resources = append(resources, res...)
 
-	res, err = r.createResourcesFromTemplate(rctx, tenant, "default-network-policy-template")
-	if err != nil {
-		return ctrl.Result{}, err
+	results := make([]reconcile.Result, 0)
+
+	resourceSet, errs := r.newResourceSet(rctx, tenant, blueprint)
+	if len(resourceSet.Spec.Groups) > 0 {
+		rs, result := r.applyResourceSet(rctx, resourceSet)
+		if result.Error == nil {
+			resourceSet = *rs
+
+		}
+		results = append(results, result)
 	}
-	resources = append(resources, res...)
 
-	rctx.Log.Info("finished generating resources", "count", len(resources))
+	if len(errs) > 0 {
+		for _, err = range errs {
+			r.Recorder.Event(&tenant, "Warning", "ResourceSet", fmt.Sprintf("Failed to generate resource set for tenant; %s", err.Error()))
+		}
+		results = append(results, rctx.RequeueIn(15))
+	}
 
-	return ctrl.Result{}, nil
+	// Handle update of status
+	results = append(results, r.updateStatus(rctx, tenant, blueprint, resourceSet))
+
+	return rctx.Complete(results...)
 }
 
-func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, tenant corev1alpha1.Tenant, resourceTemplateName string) ([]*unstructured.Unstructured, error) {
-	rt, err := r.getResourceTemplate(rctx, operatorNamespace, resourceTemplateName)
+func (r *TenantReconciler) newResourceSet(ctx reconcile.Context, tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint) (resourceSet corev1alpha1.ResourceSet, errors []error) {
+	resourceSet = corev1alpha1.ResourceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        tenant.Name,
+			Namespace:   operatorNamespace,
+			Labels:      blueprint.CommonLabels(tenant),
+			Annotations: blueprint.CommonAnnotations(tenant),
+		},
+		Spec: corev1alpha1.ResourceSetSpec{
+			Groups: make([]corev1alpha1.ResourceSetResourceGroup, 0),
+		},
+	}
+
+	for _, resourceGroup := range blueprint.Spec.Resources {
+		rsrg := corev1alpha1.ResourceSetResourceGroup{
+			Name:           resourceGroup.Name,
+			SourceTemplate: resourceGroup.Template,
+			Resources:      make([]corev1alpha1.EmbeddedResource, 0),
+		}
+
+		resources, err := r.generateResourcesFromBlueprintResourceGroup(ctx, resourceGroup, tenant, blueprint, resourceSet)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+
+		for _, resource := range resources {
+			json, err := resource.MarshalJSON()
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+
+			rsrg.Resources = append(rsrg.Resources, corev1alpha1.EmbeddedResource{
+				RawExtension: runtime.RawExtension{
+					Raw: json,
+				},
+			})
+		}
+
+		resourceSet.Spec.Groups = append(resourceSet.Spec.Groups, rsrg)
+	}
+
+	ctx.Log.V(1).Info("created resource set", "resources", resourceSet.Spec.Groups)
+	return resourceSet, errors
+}
+
+func (r *TenantReconciler) generateResourcesFromBlueprintResourceGroup(rctx reconcile.Context, resourceGroup corev1alpha1.BlueprintResourceGroup, tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint, resourceSet corev1alpha1.ResourceSet) ([]*unstructured.Unstructured, error) {
+	rtRef := types.NamespacedName{
+		Namespace: operatorNamespace,
+		Name:      resourceGroup.Template,
+	}
+	rt, err := r.getResourceTemplate(rctx, rtRef)
 	if err != nil {
 		rctx.Log.Info("ResourceTemplate not found")
 		return nil, err
 	}
 	rctx.Log.V(1).Info("found ResourceTemplate")
 
-	// TODO: Copy labels and annotations from Tenant?
-	commonLabels := map[string]string{
-		"app.net/tenant": tenant.Name,
-	}
-	commonAnnotations := map[string]string{
-		"app.net/controlled": "true",
-	}
-
-	type Namespaces struct {
-		Tenant   string
-		Operator string
+	resolver := ValueResolver{
+		TenantName:        blueprint.Spec.ResourceNamePrefix + tenant.Name, // TODO: This should probably be done in a single place
+		TenantNamespace:   blueprint.Spec.ResourceNamePrefix + tenant.Name, // TODO: This should probably be done in a single place
+		OperatorNamespace: operatorNamespace,
+		ResourceSet:       resourceSet,
+		Dynamic:           r.Dynamic,
+		Context:           rctx,
 	}
 
-	tmplData := struct {
-		Key         string
-		Name        string
-		Namespaces  Namespaces
-		Labels      map[string]string
-		Annotations map[string]string
-	}{
-		Key:  tenant.Name,
-		Name: tenant.Spec.Name,
-		Namespaces: Namespaces{
-			Tenant:   blueprintNamePrefix + tenant.Name,
-			Operator: operatorNamespace,
-		},
-		Labels:      commonLabels,
-		Annotations: commonAnnotations,
+	rctx.Log.Info("applying parameter overrides")
+	err = rt.Spec.Parameters.SetValues(resourceGroup.Parameters, resolver.Func)
+	if err != nil {
+		return nil, err
 	}
 
+	err = rt.Spec.Parameters.Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	templateData := newTemplateData(tenant, blueprint, rt.Spec.Parameters)
+
+	rctx.Log.V(1).Info("building resources from resource template", "template", resourceGroup.Template)
 	allResources := make([]*unstructured.Unstructured, 0)
 
-	rctx.Log.V(1).Info("building resources from resource template", "template", resourceTemplateName)
-
 	for _, raw := range rt.Spec.Raw {
-		templated, err := executeTemplate(rctx, raw, tmplData)
+		resources, err := r.generateUnstructureResources(raw, templateData)
 		if err != nil {
 			return nil, err
 		}
-
-		docs, err := convert.YamlToStringSlice(templated)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, doc := range docs {
-			templatedResources, err := convert.YamlToUnstructuredSlice(doc)
-			if err != nil {
-				return nil, err
-			}
-
-			allResources = append(allResources, templatedResources...)
-		}
+		allResources = append(allResources, resources...)
 	}
 
 	for _, resource := range rt.Spec.Resources {
-		templated, err := executeTemplate(rctx, string(resource.Raw), tmplData)
+		resources, err := r.generateUnstructureResources(string(resource.Raw), templateData)
 		if err != nil {
 			return nil, err
 		}
-
-		templatedResources, err := convert.YamlToUnstructuredSlice(templated)
-		if err != nil {
-			return nil, err
-		}
-
-		allResources = append(allResources, templatedResources...)
+		allResources = append(allResources, resources...)
 	}
 
-	// TODO: Set manager field
-	// TODO: Set ownerReference
+	// TODO: Set field manager for ResourceSet?
 
-	rctx.Log.V(1).Info("applying name, namespace and common labels/annotations to resources", "template", resourceTemplateName)
+	rctx.Log.V(1).Info("applying name, namespace and common labels/annotations to resources", "template", resourceGroup.Template)
 	for _, resource := range allResources {
 		resourceName := ""
 		resourceNamespace := ""
@@ -187,7 +229,7 @@ func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, te
 		case corev1alpha1.ResourceNamespaceOperator:
 			resourceNamespace = operatorNamespace
 		case corev1alpha1.ResourceNamespaceTenant:
-			resourceNamespace = blueprintNamePrefix + tenant.Name
+			resourceNamespace = blueprint.Spec.ResourceNamePrefix + tenant.Name
 		case corev1alpha1.ResourceNamespaceKeep:
 			resourceNamespace = resource.GetNamespace()
 			if resource.GroupVersionKind() == namespaceGVK {
@@ -197,7 +239,7 @@ func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, te
 
 		switch rt.Spec.Rules.Name {
 		case corev1alpha1.ResourceNameTenant:
-			resourceName = blueprintNamePrefix + tenant.Name
+			resourceName = blueprint.Spec.ResourceNamePrefix + tenant.Name
 		case corev1alpha1.ResourceNameKeep:
 			resourceName = resource.GetName()
 		}
@@ -210,35 +252,60 @@ func (r *TenantReconciler) createResourcesFromTemplate(rctx ReconcileContext, te
 		}
 
 		// TODO: Override existing labels and annotations if they exist?
-		resource.SetLabels(commonLabels)
-		resource.SetAnnotations(commonAnnotations)
+		resource.SetLabels(blueprint.CommonLabels(tenant))
+		resource.SetAnnotations(blueprint.CommonAnnotations(tenant))
 
-		rctx.Log.V(1).Info("all changes applied to resource", "template", resourceTemplateName, "resource", resource.UnstructuredContent())
+		rctx.Log.V(1).Info("all changes applied to resource", "template", resourceGroup.Template, "resource", resource.UnstructuredContent())
 	}
 
 	return allResources, nil
 }
 
-func executeTemplate(ctx ReconcileContext, tmpl string, data interface{}) (string, error) {
-	t, err := template.New("resource").Parse(tmpl)
-	if err != nil {
-		ctx.Log.Error(err, "failed to parse template")
-		return "", err
+func newTemplateData(tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint, parameters []*corev1alpha1.Parameter) templating.Data {
+	return templating.Data{
+		Key:  tenant.Name,
+		Name: tenant.Spec.Name,
+		Namespaces: templating.Namespaces{
+			Tenant:   blueprint.Spec.ResourceNamePrefix + tenant.Name,
+			Operator: operatorNamespace,
+		},
+		Labels:      blueprint.CommonLabels(tenant),
+		Annotations: blueprint.CommonAnnotations(tenant),
+		Parameters:  parameters,
 	}
-
-	var buf bytes.Buffer
-	err = t.Execute(&buf, data)
-	if err != nil {
-		ctx.Log.Error(err, "failed to execute template")
-		return "", err
-	}
-
-	str := buf.String()
-	ctx.Log.V(1).Info("finished executing template", "output", str)
-	return str, nil
 }
 
-func (r *TenantReconciler) getTenant(ctx ReconcileContext) (corev1alpha1.Tenant, error) {
+func (r *TenantReconciler) generateUnstructureResources(json string, templateData templating.Data) ([]*unstructured.Unstructured, error) {
+	allResources := make([]*unstructured.Unstructured, 0)
+
+	template, err := templating.NewYamlTemplate(json, templating.InputFormatJson)
+	if err != nil {
+		return nil, err
+	}
+
+	templated, err := template.Execute(templateData)
+	if err != nil {
+		return nil, err
+	}
+
+	docs, err := convert.YamlToStringSlice(templated)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, doc := range docs {
+		templatedResources, err := convert.YamlToUnstructuredSlice(doc)
+		if err != nil {
+			return nil, err
+		}
+
+		allResources = append(allResources, templatedResources...)
+	}
+
+	return allResources, nil
+}
+
+func (r *TenantReconciler) getTenant(ctx reconcile.Context) (corev1alpha1.Tenant, error) {
 	var tenant corev1alpha1.Tenant
 	if err := r.Get(ctx.Context, ctx.Request.NamespacedName, &tenant); err != nil {
 		return corev1alpha1.Tenant{}, err
@@ -246,15 +313,75 @@ func (r *TenantReconciler) getTenant(ctx ReconcileContext) (corev1alpha1.Tenant,
 	return tenant, nil
 }
 
-func (r *TenantReconciler) getResourceTemplate(ctx ReconcileContext, namespace string, name string) (corev1alpha1.ResourceTemplate, error) {
+func (r *TenantReconciler) getBlueprint(ctx reconcile.Context, nn types.NamespacedName) (corev1alpha1.Blueprint, error) {
+	var blueprint corev1alpha1.Blueprint
+	if err := r.Get(ctx.Context, nn, &blueprint); err != nil {
+		return corev1alpha1.Blueprint{}, err
+	}
+	return blueprint, nil
+}
+
+func (r *TenantReconciler) getResourceTemplate(ctx reconcile.Context, nn types.NamespacedName) (corev1alpha1.ResourceTemplate, error) {
 	var rt corev1alpha1.ResourceTemplate
 	if err := r.Get(ctx.Context, client.ObjectKey{
-		Name:      name,
-		Namespace: namespace,
+		Name:      nn.Name,
+		Namespace: nn.Namespace,
 	}, &rt); err != nil {
 		return corev1alpha1.ResourceTemplate{}, err
 	}
 	return rt, nil
+}
+
+func (r *TenantReconciler) getResourceSet(ctx reconcile.Context, nn types.NamespacedName) (*corev1alpha1.ResourceSet, error) {
+	var rs corev1alpha1.ResourceSet
+	if err := r.Get(ctx.Context, client.ObjectKey{
+		Name:      nn.Name,
+		Namespace: nn.Namespace,
+	}, &rs); err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}
+
+func (r *TenantReconciler) applyResourceSet(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet) (*corev1alpha1.ResourceSet, reconcile.Result) {
+	existing, err := r.getResourceSet(ctx, resourceSet.NamespacedName())
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, ctx.Error(err)
+		}
+
+		ctx.Log.Info("ResourceSet not found, creating", "resourceset", resourceSet.NamespacedName())
+		err := r.Create(ctx.Context, &resourceSet)
+		if err != nil {
+			ctx.Log.Error(err, "failed to update ResourceSet", "resourceset", resourceSet.NamespacedName())
+			return nil, ctx.Error(err)
+		}
+	}
+
+	if existing != nil {
+		existing.Spec.Groups = resourceSet.Spec.Groups
+		ctx.Log.Info("updating ResourceSet", "resourceset", resourceSet.NamespacedName())
+		err := r.Update(ctx.Context, existing)
+		if err != nil {
+			ctx.Log.Error(err, "failed to update ResourceSet", "resourceset", resourceSet.NamespacedName())
+			return nil, ctx.Error(err)
+		}
+	}
+
+	return existing, ctx.Done()
+}
+
+func (r *TenantReconciler) updateStatus(ctx reconcile.Context, tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint, resourceSet corev1alpha1.ResourceSet) reconcile.Result {
+	tenant.Status.Blueprint = blueprint.NamespacedName().String() + " v" + blueprint.ResourceVersion
+	tenant.Status.ResourceSet = resourceSet.NamespacedName().String() + " v" + resourceSet.ResourceVersion
+
+	ctx.Log.V(1).Info("updating Tenant status")
+	if err := r.Status().Update(ctx.Context, &tenant); err != nil {
+		ctx.Log.Error(err, "failed to update Tenant status")
+		return ctx.Error(err)
+	}
+
+	return ctx.Done()
 }
 
 // SetupWithManager sets up the controller with the Manager.

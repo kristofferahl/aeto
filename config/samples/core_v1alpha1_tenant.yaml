@@ -1,6 +1,7 @@
 apiVersion: core.aeto.net/v1alpha1
 kind: Tenant
 metadata:
-  name: tenant-sample
+  name: example
 spec:
-  name: "Tenant sample"
+  name: "Tenant example"
+  blueprint: default

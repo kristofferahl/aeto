@@ -16,7 +16,22 @@ spec:
     singular: tenant
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: The name of the tenant
+      jsonPath: .spec.name
+      name: Tenant
+      type: string
+    - description: Blueprint namespace/name and version
+      jsonPath: .status.blueprint
+      name: Blueprint
+      priority: 1
+      type: string
+    - description: ResourceSet namespace/name and version
+      jsonPath: .status.resourceSet
+      name: ResourceSet
+      priority: 1
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Tenant is the Schema for the tenants API
@@ -36,6 +51,10 @@ spec:
           spec:
             description: TenantSpec defines the desired state of Tenant
             properties:
+              blueprint:
+                description: Blueprint contains the name of the Blueprint to use for
+                  the tenant
+                type: string
               name:
                 description: Name is the display name of the tenant
                 type: string
@@ -44,6 +63,11 @@ spec:
             type: object
           status:
             description: TenantStatus defines the observed state of Tenant
+            properties:
+              blueprint:
+                type: string
+              resourceSet:
+                type: string
             type: object
         type: object
     served: true

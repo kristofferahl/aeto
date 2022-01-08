@@ -36,6 +36,25 @@ spec:
           spec:
             description: ResourceTemplateSpec defines the desired state of ResourceTemplate
             properties:
+              parameters:
+                description: Parameters contains parameters used for templating
+                items:
+                  description: Parameter defines a template parameter
+                  properties:
+                    default:
+                      description: Default holds the default value for the parameter
+                      type: string
+                    name:
+                      description: Name defines the name of the parameter
+                      type: string
+                    required:
+                      default: true
+                      description: Required make the parameter required
+                      type: boolean
+                  required:
+                  - name
+                  type: object
+                type: array
               raw:
                 description: Raw contains raw yaml documents in go templating format
                   (prefer using Manifests over Raw)
@@ -66,6 +85,7 @@ spec:
                     type: string
                 type: object
             required:
+            - parameters
             - rules
             type: object
           status:
