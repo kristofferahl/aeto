@@ -1,3 +1,4 @@
+namespace: aeto
 resources:
   - default-blueprint.yaml
   - default-namespace-template.yaml

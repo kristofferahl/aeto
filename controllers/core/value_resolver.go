@@ -1,11 +1,11 @@
-package controllers
+package core
 
 import (
 	"encoding/json"
 	"fmt"
 
 	"github.com/PaesslerAG/jsonpath"
-	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
+	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"k8s.io/apimachinery/pkg/runtime/schema"

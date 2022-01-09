@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright 2022.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package core
 
 import (
 	"context"
@@ -33,7 +33,7 @@ import (
 
 	testfactory "github.com/kristofferahl/aeto/internal/pkg/testing"
 
-	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
+	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -57,7 +57,7 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 	}
 

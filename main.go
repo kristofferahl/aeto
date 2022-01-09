@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright 2022.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,8 +36,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
-	"github.com/kristofferahl/aeto/controllers"
+	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	corecontrollers "github.com/kristofferahl/aeto/controllers/core"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -118,7 +118,7 @@ func main() {
 		DiscoveryClient: discoveryClient,
 	}
 
-	if err = (&controllers.TenantReconciler{
+	if err = (&corecontrollers.TenantReconciler{
 		Client:   mgr.GetClient(),
 		Dynamic:  dynamicClients,
 		Scheme:   mgr.GetScheme(),
@@ -127,21 +127,21 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Tenant")
 		os.Exit(1)
 	}
-	if err = (&controllers.BlueprintReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Blueprint")
-		os.Exit(1)
-	}
-	if err = (&controllers.ResourceTemplateReconciler{
+	if err = (&corecontrollers.ResourceTemplateReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ResourceTemplate")
 		os.Exit(1)
 	}
-	if err = (&controllers.ResourceSetReconciler{
+	if err = (&corecontrollers.BlueprintReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Blueprint")
+		os.Exit(1)
+	}
+	if err = (&corecontrollers.ResourceSetReconciler{
 		Client:  mgr.GetClient(),
 		Dynamic: dynamicClients,
 		Scheme:  mgr.GetScheme(),

@@ -1,6 +1,7 @@
 domain: aeto.net
 layout:
 - go.kubebuilder.io/v3
+multigroup: true
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
@@ -13,8 +14,8 @@ resources:
   controller: true
   domain: aeto.net
   group: core
-  kind: ResourceTemplate
-  path: github.com/kristofferahl/aeto/api/v1alpha1
+  kind: Tenant
+  path: github.com/kristofferahl/aeto/apis/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -22,8 +23,8 @@ resources:
   controller: true
   domain: aeto.net
   group: core
-  kind: Tenant
-  path: github.com/kristofferahl/aeto/api/v1alpha1
+  kind: ResourceTemplate
+  path: github.com/kristofferahl/aeto/apis/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -32,7 +33,7 @@ resources:
   domain: aeto.net
   group: core
   kind: Blueprint
-  path: github.com/kristofferahl/aeto/api/v1alpha1
+  path: github.com/kristofferahl/aeto/apis/core/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -41,6 +42,6 @@ resources:
   domain: aeto.net
   group: core
   kind: ResourceSet
-  path: github.com/kristofferahl/aeto/api/v1alpha1
+  path: github.com/kristofferahl/aeto/apis/core/v1alpha1
   version: v1alpha1
 version: "3"

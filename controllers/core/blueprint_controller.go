@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright 2022.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package core
 
 import (
 	"context"
@@ -24,29 +24,29 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
+	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 )
 
-// ResourceTemplateReconciler reconciles a ResourceTemplate object
-type ResourceTemplateReconciler struct {
+// BlueprintReconciler reconciles a Blueprint object
+type BlueprintReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=core.aeto.net,resources=resourcetemplates,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core.aeto.net,resources=resourcetemplates/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core.aeto.net,resources=resourcetemplates/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core.aeto.net,resources=blueprints,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core.aeto.net,resources=blueprints/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=core.aeto.net,resources=blueprints/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the ResourceTemplate object against the actual cluster state, and then
+// the Blueprint object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *ResourceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *BlueprintReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
 	// your logic here
@@ -55,8 +55,8 @@ func (r *ResourceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ResourceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *BlueprintReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1alpha1.ResourceTemplate{}).
+		For(&corev1alpha1.Blueprint{}).
 		Complete(r)
 }

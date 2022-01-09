@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	corev1alpha1 "github.com/kristofferahl/aeto/api/v1alpha1"
+	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 )
 
 type Data struct {
