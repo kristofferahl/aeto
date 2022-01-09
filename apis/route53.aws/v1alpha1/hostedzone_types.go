@@ -53,11 +53,23 @@ type HostedZoneConnection struct {
 type HostedZoneStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	Id string `json:"id,omitempty"`
+
+	Ready bool `json:"ready,omitempty"`
+
+	State string `json:"state,omitempty"`
+
+	ConnectedTo string `json:"connectedTo,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="HostedZone",priority=0,type=string,JSONPath=`.spec.name`
+//+kubebuilder:printcolumn:name="Id",priority=1,type=string,JSONPath=`.status.id`
+//+kubebuilder:printcolumn:name="State",priority=1,type=string,JSONPath=`.status.state`
+//+kubebuilder:printcolumn:name="Connected_To",priority=1,type=string,JSONPath=`.status.connectedTo`
+//+kubebuilder:printcolumn:name="Ready",priority=0,type=boolean,JSONPath=`.status.ready`
 
 // HostedZone is the Schema for the hostedzones API
 type HostedZone struct {

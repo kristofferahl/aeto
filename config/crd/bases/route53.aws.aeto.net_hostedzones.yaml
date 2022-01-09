@@ -20,6 +20,21 @@ spec:
     - jsonPath: .spec.name
       name: HostedZone
       type: string
+    - jsonPath: .status.id
+      name: Id
+      priority: 1
+      type: string
+    - jsonPath: .status.state
+      name: State
+      priority: 1
+      type: string
+    - jsonPath: .status.connectedTo
+      name: Connected_To
+      priority: 1
+      type: string
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -64,6 +79,15 @@ spec:
             type: object
           status:
             description: HostedZoneStatus defines the observed state of HostedZone
+            properties:
+              connectedTo:
+                type: string
+              id:
+                type: string
+              ready:
+                type: boolean
+              state:
+                type: string
             type: object
         type: object
     served: true

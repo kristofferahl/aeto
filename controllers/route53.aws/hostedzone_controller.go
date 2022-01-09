@@ -19,6 +19,7 @@ package route53aws
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -67,10 +68,11 @@ func (r *HostedZoneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	rctx.Log.V(1).Info("found HostedZone", "hostedzone", hostedZone)
 
-	nsRecordSet, hostedZoneResult := r.reconcileHostedZone(rctx, hostedZone)
-	connectionResult := r.reconcileHostedZoneConnection(rctx, hostedZone, nsRecordSet)
+	hz, hzns, hostedZoneResult := r.reconcileHostedZone(rctx, hostedZone)
+	chz, cns, connectionResult := r.reconcileHostedZoneConnection(rctx, hostedZone, hzns)
+	statusRes := r.reconcileStatus(rctx, hostedZone, hz, chz, cns)
 
-	return rctx.Complete(hostedZoneResult, connectionResult)
+	return rctx.Complete(hostedZoneResult, connectionResult, statusRes)
 }
 
 func (r *HostedZoneReconciler) getHostedZone(ctx reconcile.Context, req ctrl.Request) (route53awsv1alpha1.HostedZone, error) {
@@ -82,7 +84,7 @@ func (r *HostedZoneReconciler) getHostedZone(ctx reconcile.Context, req ctrl.Req
 	return hostedZone, nil
 }
 
-func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone) (*types.ResourceRecordSet, reconcile.Result) {
+func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone) (*types.HostedZone, *types.ResourceRecordSet, reconcile.Result) {
 	hz, err := r.AWS.GetRoute53HostedZoneByName(ctx.Context, hostedZone.Spec.Name)
 	if err != nil {
 		ctx.Log.Info("AWS Route53 HostedZone not found, creating", "name", hostedZone.Spec.Name)
@@ -90,7 +92,7 @@ func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hosted
 		hz, err = r.newHostedZone(ctx, hostedZone.Spec.Name)
 		if err != nil {
 			ctx.Log.Error(err, "failed to create AWS Route53 HostedZone", "name", hostedZone.Spec.Name)
-			return nil, ctx.Error(err)
+			return nil, nil, ctx.Error(err)
 		}
 	} else {
 		ctx.Log.V(1).Info("AWS Route53 HostedZone found", "name", *hz.Name, "id", *hz.Id)
@@ -100,39 +102,68 @@ func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hosted
 		hzns, err := r.getHostedZoneNsRecordSet(ctx, *hz.Id, *hz.Name)
 		if err != nil {
 			ctx.Log.Error(err, "NS recordset not found for AWS Route53 HostedZone", "name", *hz.Name, "id", *hz.Id)
-			return nil, ctx.Error(err)
+			return &hz, nil, ctx.Error(err)
 		}
 
-		return &hzns, ctx.Done()
+		return &hz, &hzns, ctx.Done()
 	}
 
-	return nil, ctx.Done()
+	return &hz, nil, ctx.Done()
 }
 
-func (r *HostedZoneReconciler) reconcileHostedZoneConnection(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone, nsRecordSet *types.ResourceRecordSet) reconcile.Result {
+func (r *HostedZoneReconciler) reconcileHostedZoneConnection(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone, nsRecordSet *types.ResourceRecordSet) (*types.HostedZone, *types.ResourceRecordSet, reconcile.Result) {
 	if hostedZone.Spec.ConnectWith == nil {
 		// All good, nothing to do
-		return ctx.Done()
+		return nil, nil, ctx.Done()
 	}
 
 	if nsRecordSet == nil {
-		return ctx.RequeueIn(5)
+		return nil, nil, ctx.RequeueIn(5)
 	}
 
 	phz, err := r.AWS.GetRoute53HostedZoneByName(ctx.Context, hostedZone.Spec.ConnectWith.Name)
 	if err != nil {
 		ctx.Log.Error(err, "AWS Route53 HostedZone HostedZone not found", "name", hostedZone.Spec.ConnectWith.Name)
-		return ctx.Error(err)
+		return nil, nil, ctx.Error(err)
 	}
 
-	_, err = r.getHostedZoneNsRecordSet(ctx, *phz.Id, *nsRecordSet.Name)
+	phzns, err := r.getHostedZoneNsRecordSet(ctx, *phz.Id, *nsRecordSet.Name)
 	if err != nil {
 		ctx.Log.V(1).Info("NS recordset not found for AWS Route53 HostedZone, creating", "name", phz.Name, "id", phz.Id, "ns", *nsRecordSet)
 
 		err = r.upsertHostedZoneNSRecordSet(ctx.Context, phz, *nsRecordSet, hostedZone.Spec.ConnectWith.TTL)
 		if err != nil {
-			return ctx.Error(err)
+			return &phz, nil, ctx.Error(err)
 		}
+	}
+
+	return &phz, &phzns, ctx.Done()
+}
+
+func (r *HostedZoneReconciler) reconcileStatus(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone, hz *types.HostedZone, phz *types.HostedZone, phzns *types.ResourceRecordSet) reconcile.Result {
+	hostedZone.Status.State = "Creating"
+	hostedZone.Status.Ready = false
+
+	if hz != nil {
+		hostedZone.Status.Id = strings.ReplaceAll(*hz.Id, "/hostedzone/", "")
+		hostedZone.Status.State = "Created"
+		hostedZone.Status.ConnectedTo = ""
+		hostedZone.Status.Ready = true
+
+		if hostedZone.Spec.ConnectWith != nil {
+			if phz == nil || phzns == nil {
+				hostedZone.Status.Ready = false
+			} else {
+				hostedZone.Status.ConnectedTo = strings.TrimSuffix(*phz.Name, ".")
+				hostedZone.Status.Ready = true
+			}
+		}
+	}
+
+	ctx.Log.V(1).Info("updating HostedZone status")
+	if err := r.Status().Update(ctx.Context, &hostedZone); err != nil {
+		ctx.Log.Error(err, "failed to update HostedZone status")
+		return ctx.Error(err)
 	}
 
 	return ctx.Done()
