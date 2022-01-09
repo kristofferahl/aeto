@@ -41,8 +41,10 @@ import (
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
 
+	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	route53awsv1alpha1 "github.com/kristofferahl/aeto/apis/route53.aws/v1alpha1"
+	acmawscontrollers "github.com/kristofferahl/aeto/controllers/acm.aws"
 	corecontrollers "github.com/kristofferahl/aeto/controllers/core"
 	route53awscontrollers "github.com/kristofferahl/aeto/controllers/route53.aws"
 	//+kubebuilder:scaffold:imports
@@ -58,6 +60,7 @@ func init() {
 
 	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(route53awsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(acmawsv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -173,6 +176,13 @@ func main() {
 		AWS:    awsClients,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HostedZone")
+		os.Exit(1)
+	}
+	if err = (&acmawscontrollers.CertificateReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Certificate")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
