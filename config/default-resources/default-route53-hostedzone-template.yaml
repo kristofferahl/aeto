@@ -15,3 +15,6 @@ spec:
         name: "injected"
       spec:
         name: '{{ .Key }}.{{ .String "ParentHostedZoneName" }}'
+        connectWith:
+          name: '{{ .String "ParentHostedZoneName" }}'
+          ttl: 300

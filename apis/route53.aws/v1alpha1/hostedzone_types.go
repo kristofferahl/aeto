@@ -28,9 +28,25 @@ type HostedZoneSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	/// Name is the desired name for the AWS Route53 HostedZone.
+	// Name is the desired name for the AWS Route53 HostedZone.
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
+
+	// ConnectWith tells the operator to connect the HostedZone with a parent hosted zone by upserting it's NS recordset.
+	// +kubebuilder:validation:Optional
+	ConnectWith *HostedZoneConnection `json:"connectWith,omitempty"`
+}
+
+// HostedZoneConnection defines the connection details for the HostedZone
+type HostedZoneConnection struct {
+	// Name of the AWS Route53 HostedZone to connect with.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// TTL used for the NS recordset created in the specified AWS Route53 HostedZone.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=172800
+	TTL int64 `json:"ttl,omitempty"`
 }
 
 // HostedZoneStatus defines the observed state of HostedZone
@@ -41,7 +57,7 @@ type HostedZoneStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Name",priority=0,type=string,JSONPath=`.spec.name`
+//+kubebuilder:printcolumn:name="HostedZone",priority=0,type=string,JSONPath=`.spec.name`
 
 // HostedZone is the Schema for the hostedzones API
 type HostedZone struct {

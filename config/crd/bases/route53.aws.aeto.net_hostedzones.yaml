@@ -18,7 +18,7 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.name
-      name: Name
+      name: HostedZone
       type: string
     name: v1alpha1
     schema:
@@ -40,8 +40,24 @@ spec:
           spec:
             description: HostedZoneSpec defines the desired state of HostedZone
             properties:
+              connectWith:
+                description: ConnectWith tells the operator to connect the HostedZone
+                  with a parent hosted zone by upserting it's NS recordset.
+                properties:
+                  name:
+                    description: Name of the AWS Route53 HostedZone to connect with.
+                    type: string
+                  ttl:
+                    default: 172800
+                    description: TTL used for the NS recordset created in the specified
+                      AWS Route53 HostedZone.
+                    format: int64
+                    type: integer
+                required:
+                - name
+                type: object
               name:
-                description: / Name is the desired name for the AWS Route53 HostedZone.
+                description: Name is the desired name for the AWS Route53 HostedZone.
                 type: string
             required:
             - name
