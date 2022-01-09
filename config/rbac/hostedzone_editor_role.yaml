@@ -1,0 +1,24 @@
+# permissions for end users to edit hostedzones.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hostedzone-editor-role
+rules:
+- apiGroups:
+  - route53.aws.aeto.net
+  resources:
+  - hostedzones
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - route53.aws.aeto.net
+  resources:
+  - hostedzones/status
+  verbs:
+  - get

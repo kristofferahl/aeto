@@ -27,8 +27,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"github.com/kristofferahl/aeto/internal/pkg/config"
-	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -36,8 +34,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/kristofferahl/aeto/internal/pkg/config"
+	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
+
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	route53awsv1alpha1 "github.com/kristofferahl/aeto/apis/route53.aws/v1alpha1"
 	corecontrollers "github.com/kristofferahl/aeto/controllers/core"
+	route53awscontrollers "github.com/kristofferahl/aeto/controllers/route53.aws"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -50,6 +53,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(route53awsv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -147,6 +151,13 @@ func main() {
 		Scheme:  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ResourceSet")
+		os.Exit(1)
+	}
+	if err = (&route53awscontrollers.HostedZoneReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "HostedZone")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

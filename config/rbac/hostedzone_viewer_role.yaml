@@ -1,0 +1,20 @@
+# permissions for end users to view hostedzones.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hostedzone-viewer-role
+rules:
+- apiGroups:
+  - route53.aws.aeto.net
+  resources:
+  - hostedzones
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - route53.aws.aeto.net
+  resources:
+  - hostedzones/status
+  verbs:
+  - get

@@ -44,4 +44,13 @@ resources:
   kind: ResourceSet
   path: github.com/kristofferahl/aeto/apis/core/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: aeto.net
+  group: route53.aws
+  kind: HostedZone
+  path: github.com/kristofferahl/aeto/apis/route53.aws/v1alpha1
+  version: v1alpha1
 version: "3"
