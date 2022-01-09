@@ -99,7 +99,6 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		rs, result := r.applyResourceSet(rctx, resourceSet)
 		if result.Error == nil {
 			resourceSet = *rs
-
 		}
 		results = append(results, result)
 	}
@@ -160,7 +159,7 @@ func (r *TenantReconciler) newResourceSet(ctx reconcile.Context, tenant corev1al
 		resourceSet.Spec.Groups = append(resourceSet.Spec.Groups, rsrg)
 	}
 
-	ctx.Log.V(1).Info("created resource set", "resources", resourceSet.Spec.Groups)
+	ctx.Log.V(1).Info("generated new resource set", "resources", resourceSet.Spec.Groups)
 	return resourceSet, errors
 }
 
@@ -352,9 +351,11 @@ func (r *TenantReconciler) applyResourceSet(ctx reconcile.Context, resourceSet c
 		ctx.Log.Info("ResourceSet not found, creating", "resourceset", resourceSet.NamespacedName())
 		err := r.Create(ctx.Context, &resourceSet)
 		if err != nil {
-			ctx.Log.Error(err, "failed to update ResourceSet", "resourceset", resourceSet.NamespacedName())
+			ctx.Log.Error(err, "failed to create ResourceSet", "resourceset", resourceSet.NamespacedName())
 			return nil, ctx.Error(err)
 		}
+
+		return &resourceSet, ctx.Done()
 	}
 
 	if existing != nil {
