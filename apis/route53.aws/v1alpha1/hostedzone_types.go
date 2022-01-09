@@ -28,8 +28,9 @@ type HostedZoneSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of HostedZone. Edit hostedzone_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	/// Name is the desired name for the AWS Route53 HostedZone.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
 }
 
 // HostedZoneStatus defines the observed state of HostedZone
@@ -40,6 +41,7 @@ type HostedZoneStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Name",priority=0,type=string,JSONPath=`.spec.name`
 
 // HostedZone is the Schema for the hostedzones API
 type HostedZone struct {

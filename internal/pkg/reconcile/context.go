@@ -12,9 +12,10 @@ import (
 
 // Context provides context during reconciles
 type Context struct {
-	Request ctrl.Request
-	Context context.Context
-	Log     logr.Logger
+	CorrelationId string
+	Request       ctrl.Request
+	Context       context.Context
+	Log           logr.Logger
 }
 
 // NewContext creates a new context
@@ -22,9 +23,10 @@ func NewContext(name string, req ctrl.Request, log logr.Logger) Context {
 	id := []rune(guuid.New().String())
 	cid := string(id[0:7])
 	return Context{
-		Context: context.Background(),
-		Log:     log.WithValues("cid", cid),
-		Request: req,
+		CorrelationId: cid,
+		Context:       context.Background(),
+		Log:           log.WithValues("cid", cid),
+		Request:       req,
 	}
 }
 

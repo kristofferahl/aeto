@@ -4,6 +4,9 @@ go 1.16
 
 require (
 	github.com/PaesslerAG/jsonpath v0.1.1
+	github.com/aws/aws-sdk-go v1.42.30
+	github.com/aws/aws-sdk-go-v2/config v1.12.0
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.16.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.4.0
 	github.com/google/uuid v1.1.2

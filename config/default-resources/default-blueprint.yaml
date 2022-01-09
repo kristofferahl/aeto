@@ -16,3 +16,8 @@ spec:
           value: 200m
         - name: DefaultMemoryLimit
           value: 200Mi
+    - name: hosted_zone
+      template: default-route53-hostedzone-template
+      parameters:
+        - name: ParentHostedZoneName
+          value: apps.aeto.net

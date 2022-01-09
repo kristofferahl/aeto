@@ -1,0 +1,17 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: ResourceTemplate
+metadata:
+  name: default-route53-hostedzone-template
+spec:
+  rules:
+    name: tenant
+    namespace: operator
+  parameters:
+    - name: ParentHostedZoneName
+  resources:
+    - apiVersion: route53.aws.aeto.net/v1alpha1
+      kind: HostedZone
+      metadata:
+        name: "injected"
+      spec:
+        name: '{{ .Key }}.{{ .String "ParentHostedZoneName" }}'

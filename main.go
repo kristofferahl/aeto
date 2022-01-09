@@ -17,23 +17,27 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/dynamic"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/kristofferahl/aeto/internal/pkg/aws"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
 
@@ -105,6 +109,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	awsConfig, err := awsconfig.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		setupLog.Error(err, "unable to load AWS credentials")
+		os.Exit(1)
+	}
+
+	awsClients := aws.Clients{
+		Route53: route53.NewFromConfig(awsConfig),
+	}
+
 	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		setupLog.Error(err, "unable to create dynamic client")
@@ -156,6 +170,7 @@ func main() {
 	if err = (&route53awscontrollers.HostedZoneReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		AWS:    awsClients,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HostedZone")
 		os.Exit(1)
