@@ -140,7 +140,7 @@ func (rtp ResourceTemplateParameterList) Validate() (err error) {
 	return err
 }
 
-// NamespacedName returns a namespaced name fot the custom resource
+// NamespacedName returns a namespaced name for the custom resource
 func (rt ResourceTemplate) NamespacedName() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: rt.Namespace,

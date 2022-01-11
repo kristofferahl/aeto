@@ -116,7 +116,7 @@ func (b Blueprint) CommonAnnotations(tenant Tenant) map[string]string {
 	return annotations
 }
 
-// NamespacedName returns a namespaced name fot the custom resource
+// NamespacedName returns a namespaced name for the custom resource
 func (b Blueprint) NamespacedName() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: b.Namespace,

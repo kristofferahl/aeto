@@ -80,7 +80,7 @@ func (t *Tenant) Blueprint() string {
 	return "default"
 }
 
-// NamespacedName returns a namespaced name fot the custom resource
+// NamespacedName returns a namespaced name for the custom resource
 func (t Tenant) NamespacedName() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: t.Namespace,

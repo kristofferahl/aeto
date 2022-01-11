@@ -108,7 +108,7 @@ func (g *ResourceSetResourceGroup) JsonPath(path string) (string, error) {
 	return fmt.Sprintf("%s", value), nil
 }
 
-// NamespacedName returns a namespaced name fot the custom resource
+// NamespacedName returns a namespaced name for the custom resource
 func (rs ResourceSet) NamespacedName() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: rs.Namespace,
