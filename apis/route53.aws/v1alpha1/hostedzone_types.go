@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -87,6 +88,14 @@ type HostedZoneList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []HostedZone `json:"items"`
+}
+
+// NamespacedName returns a namespaced name for the custom resource
+func (hz HostedZone) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: hz.Namespace,
+		Name:      hz.Name,
+	}
 }
 
 func init() {

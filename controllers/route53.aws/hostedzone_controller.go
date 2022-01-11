@@ -66,7 +66,7 @@ func (r *HostedZoneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("found HostedZone", "hostedzone", hostedZone)
+	rctx.Log.V(1).Info("found HostedZone", "hostedzone", hostedZone.NamespacedName())
 
 	hz, hzns, hostedZoneResult := r.reconcileHostedZone(rctx, hostedZone)
 	chz, cns, connectionResult := r.reconcileHostedZoneConnection(rctx, hostedZone, hzns)
