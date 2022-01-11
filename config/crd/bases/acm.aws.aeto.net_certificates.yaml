@@ -1,0 +1,89 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: certificates.acm.aws.aeto.net
+spec:
+  group: acm.aws.aeto.net
+  names:
+    kind: Certificate
+    listKind: CertificateList
+    plural: certificates
+    singular: certificate
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.domainName
+      name: DomainName
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.inUse
+      name: InUse
+      priority: 1
+      type: boolean
+    - jsonPath: .status.arn
+      name: Arn
+      priority: 1
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Certificate is the Schema for the certificates API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CertificateSpec defines the desired state of Certificate
+            properties:
+              domainName:
+                description: DomainName is the fully qualified domain name (fqdn)
+                  used to create the AWS ACM Certificate.
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: Tags defines the tags to apply to the certificate
+                type: object
+            required:
+            - domainName
+            type: object
+          status:
+            description: CertificateStatus defines the observed state of Certificate
+            properties:
+              arn:
+                description: Arn is the ARN of the AWS ACM Certificate.
+                type: string
+              inUse:
+                description: InUse declares if the AWS ACM Certificate is in use.
+                type: boolean
+              state:
+                description: State is the current status of the AWS ACM Certificate.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

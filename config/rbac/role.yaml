@@ -7,6 +7,32 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - acm.aws.aeto.net
+  resources:
+  - certificates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - acm.aws.aeto.net
+  resources:
+  - certificates/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - acm.aws.aeto.net
+  resources:
+  - certificates/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - core.aeto.net
   resources:
   - blueprints

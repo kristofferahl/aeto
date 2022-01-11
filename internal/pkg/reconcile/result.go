@@ -12,9 +12,27 @@ type Result struct {
 	RequeueIn time.Duration
 }
 
-// Requeue returns true when error was found or a requeue was requested
+// ResultList contains a list of results
+type ResultList []Result
+
+// Success returns true when all result represents a successful reconcile attempt
+func (rl ResultList) Success() bool {
+	for _, rr := range rl {
+		if rr.IsError() {
+			return false
+		}
+	}
+	return true
+}
+
+// IsError returns true when the result represents a failed reconcile attempt
+func (rr Result) IsError() bool {
+	return rr.Error != nil
+}
+
+// Requeue returns true when there was an error or a requeue was requested
 func (rr Result) Requeue() bool {
-	return rr.Error != nil || rr.RequeueIn.String() != "0s"
+	return rr.IsError() || rr.RequeueIn.String() != "0s"
 }
 
 // RequeueRequest logs and returns a controller runtime result with a request to requeue
@@ -26,5 +44,6 @@ func (rr Result) RequeueRequest(ctx Context) (ctrl.Result, error) {
 	if rr.RequeueIn.String() == "0s" {
 		return ctrl.Result{}, rr.Error
 	}
+
 	return ctrl.Result{RequeueAfter: rr.RequeueIn}, rr.Error
 }

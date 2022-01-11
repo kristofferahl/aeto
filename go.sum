@@ -75,6 +75,8 @@ github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.1.0 h1:ArRd27pSm66f7cCBDPS
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.1.0/go.mod h1:KdVvdk4gb7iatuHZgIkIqvJlWHBtjCJLUtD/uO/FkWw=
 github.com/aws/aws-sdk-go-v2/internal/ini v1.3.3 h1:fmGqMNlFTHr9Y48qmYYv2qIo+TAsST3qZa2d1HcwBeo=
 github.com/aws/aws-sdk-go-v2/internal/ini v1.3.3/go.mod h1:N4dv+zawriMFZBO/6UKg3zt+XO6xWOQo1neAA0lFbo4=
+github.com/aws/aws-sdk-go-v2/service/acm v1.11.0 h1:v0jD5c5dwvXVCiKejGrS/ZWUJZP8Sx8wKrYptWECoas=
+github.com/aws/aws-sdk-go-v2/service/acm v1.11.0/go.mod h1:zRr84/6BoYUDmB230nyNCBlo6PUNh6N1voWOL9SnLKM=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.6.0 h1:rwE0kWa5qm0yEoNPwC3zhrt1tFVXTmkWRlUxLayAwyc=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.6.0/go.mod h1:wTgFkG6t7jS/6Y0SILXwfspV3IXowb6ngsAlSajW0Kc=
 github.com/aws/aws-sdk-go-v2/service/route53 v1.16.0 h1:xWoSNH+tQ0x0yHqCanSN9l3hAmc6nb+UaTabp720GvU=

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/acm"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -119,6 +120,7 @@ func main() {
 	}
 
 	awsClients := aws.Clients{
+		Acm:     acm.NewFromConfig(awsConfig),
 		Route53: route53.NewFromConfig(awsConfig),
 	}
 
@@ -181,6 +183,7 @@ func main() {
 	if err = (&acmawscontrollers.CertificateReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		AWS:    awsClients,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Certificate")
 		os.Exit(1)

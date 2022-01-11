@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -28,18 +29,36 @@ type CertificateSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Certificate. Edit certificate_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// DomainName is the fully qualified domain name (fqdn) used to create the AWS ACM Certificate.
+	// +kubebuilder:validation:Required
+	DomainName string `json:"domainName"`
+
+	// Tags defines the tags to apply to the certificate
+	// +kubebuilder:validation:Optional
+	Tags map[string]string `json:"tags,omitempty"`
 }
 
 // CertificateStatus defines the observed state of Certificate
 type CertificateStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Arn is the ARN of the AWS ACM Certificate.
+	Arn string `json:"arn,omitempty"`
+
+	// State is the current status of the AWS ACM Certificate.
+	State string `json:"state,omitempty"`
+
+	// InUse declares if the AWS ACM Certificate is in use.
+	InUse bool `json:"inUse,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="DomainName",priority=0,type=string,JSONPath=`.spec.domainName`
+//+kubebuilder:printcolumn:name="State",priority=0,type=string,JSONPath=`.status.state`
+//+kubebuilder:printcolumn:name="InUse",priority=1,type=boolean,JSONPath=`.status.inUse`
+//+kubebuilder:printcolumn:name="Arn",priority=1,type=string,JSONPath=`.status.arn`
 
 // Certificate is the Schema for the certificates API
 type Certificate struct {
@@ -57,6 +76,14 @@ type CertificateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Certificate `json:"items"`
+}
+
+// NamespacedName returns a namespaced name for the custom resource
+func (c Certificate) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: c.Namespace,
+		Name:      c.Name,
+	}
 }
 
 func init() {

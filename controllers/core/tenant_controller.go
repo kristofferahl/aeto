@@ -261,8 +261,9 @@ func (r *TenantReconciler) generateResourcesFromBlueprintResourceGroup(rctx reco
 
 func newTemplateData(tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint, parameters []*corev1alpha1.Parameter) templating.Data {
 	return templating.Data{
-		Key:  tenant.Name,
-		Name: tenant.Spec.Name,
+		Key:                tenant.Name,
+		ResourceNamePrefix: blueprint.Spec.ResourceNamePrefix,
+		Name:               tenant.Spec.Name,
 		Namespaces: templating.Namespaces{
 			Tenant:   blueprint.Spec.ResourceNamePrefix + tenant.Name,
 			Operator: config.Operator.Namespace,

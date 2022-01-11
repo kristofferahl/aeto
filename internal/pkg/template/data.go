@@ -8,12 +8,13 @@ import (
 )
 
 type Data struct {
-	Key         string
-	Name        string
-	Namespaces  Namespaces
-	Labels      map[string]string
-	Annotations map[string]string
-	Parameters  []*corev1alpha1.Parameter
+	Key                string
+	ResourceNamePrefix string
+	Name               string
+	Namespaces         Namespaces
+	Labels             map[string]string
+	Annotations        map[string]string
+	Parameters         []*corev1alpha1.Parameter
 }
 
 type Namespaces struct {
