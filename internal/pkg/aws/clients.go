@@ -17,23 +17,31 @@ type Clients struct {
 	Route53 *route53.Client
 }
 
-// GetAcmCertificateByDomainName returns the first matching ACM Certificate by domain name
-func (c Clients) GetAcmCertificateByDomainName(ctx context.Context, domainName string) (acmtypes.CertificateSummary, error) {
-	// TODO: If there are multiple matching certificates, return error
-
+// FindOneAcmCertificateByDomainName returns the first matching ACM Certificate by domain name
+func (c Clients) FindOneAcmCertificateByDomainName(ctx context.Context, domainName string) (*acmtypes.CertificateSummary, error) {
 	res, err := c.Acm.ListCertificates(ctx, &acm.ListCertificatesInput{})
 	if err != nil {
-		return acmtypes.CertificateSummary{}, err
+		return nil, err
 	}
+
+	matches := make([]acmtypes.CertificateSummary, 0)
 
 	for _, cert := range res.CertificateSummaryList {
 		match := *cert.DomainName == domainName
 		if match {
-			return cert, nil
+			matches = append(matches, cert)
 		}
 	}
 
-	return acmtypes.CertificateSummary{}, fmt.Errorf("no AWS ACM Certificate found matching the domain name %s", domainName)
+	if len(matches) == 1 {
+		return &matches[0], nil
+	}
+
+	if len(matches) > 0 {
+		return nil, fmt.Errorf("multiple certificates found matching the domain name %s", domainName)
+	}
+
+	return nil, nil
 }
 
 // GetAcmCertificateDetailsByArn returns ACM Certificate details by ARN
@@ -112,25 +120,33 @@ func (c Clients) GetRoute53HostedZoneById(ctx context.Context, id string) (route
 	return *res.HostedZone, nil
 }
 
-// GetRoute53HostedZoneByName returns the first matching Route53 HostedZone by name
-func (c Clients) GetRoute53HostedZoneByName(ctx context.Context, name string) (route53types.HostedZone, error) {
-	// TODO: If there are multiple matching hosted zones, return error
-
+// FindOneRoute53HostedZoneByName returns the first matching Route53 HostedZone by name
+func (c Clients) FindOneRoute53HostedZoneByName(ctx context.Context, name string) (*route53types.HostedZone, error) {
 	zones, err := c.Route53.ListHostedZonesByName(ctx, &route53.ListHostedZonesByNameInput{
 		DNSName: aws.String(name),
 	})
 	if err != nil {
-		return route53types.HostedZone{}, err
+		return nil, err
 	}
 
+	matches := make([]route53types.HostedZone, 0)
+
 	for _, zone := range zones.HostedZones {
-		isMatch := *zone.Name == name+"."
-		if isMatch {
-			return zone, nil
+		match := *zone.Name == name+"."
+		if match {
+			matches = append(matches, zone)
 		}
 	}
 
-	return route53types.HostedZone{}, fmt.Errorf("no AWS Route53 HostedZone found matching the name %s", name)
+	if len(matches) == 1 {
+		return &matches[0], nil
+	}
+
+	if len(matches) > 0 {
+		return nil, fmt.Errorf("multiple hosted zones found matching the name %s", name)
+	}
+
+	return nil, nil
 }
 
 // UpsertRoute53ResourceRecordSet creates or updates a resource recordset in the specified hosted zone
