@@ -1,6 +1,0 @@
-apiVersion: acm.aws.aeto.net/v1alpha1
-kind: Certificate
-metadata:
-  name: certificate-sample
-spec:
-  # Add fields here
