@@ -22,6 +22,7 @@ spec:
       type: string
     - jsonPath: .status.state
       name: State
+      priority: 1
       type: string
     - jsonPath: .status.inUse
       name: InUse
@@ -31,6 +32,9 @@ spec:
       name: Arn
       priority: 1
       type: string
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -86,6 +90,9 @@ spec:
                 type: string
               inUse:
                 description: InUse declares if the AWS ACM Certificate is in use.
+                type: boolean
+              ready:
+                description: Ready is true when the resource is created and valid
                 type: boolean
               state:
                 description: State is the current status of the AWS ACM Certificate.

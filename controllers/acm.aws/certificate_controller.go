@@ -98,7 +98,7 @@ func (r *CertificateReconciler) getCertificate(ctx reconcile.Context, req ctrl.R
 func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate) (*acmtypes.CertificateDetail, reconcile.Result) {
 	ca := certificate.Status.Arn
 
-	// No arn set, try and import or create it
+	// No arn set, try and create it
 	if ca == "" {
 		ctx.Log.Info("creating a new AWS ACM Certificate", "domain-name", certificate.Spec.DomainName)
 		arn, err := r.newAcmCertificate(ctx, certificate)
@@ -149,6 +149,8 @@ func (r *CertificateReconciler) reconcileCertificateValidation(ctx reconcile.Con
 				return r.reconcileCertificateDnsValidationRecord(ctx, certificate.Spec.Validation.Dns.HostedZonedId, *details)
 			}
 		case acmtypes.CertificateStatusIssued:
+			// TODO: Delete validation record when issued or is it needed for renewal?
+			// https://docs.aws.amazon.com/acm/latest/userguide/dns-renewal-validation.html
 			break
 		default:
 			ctx.Log.Info("unhandled status for AWS ACM Certificate", "status", details.Status, "arn", *details.CertificateArn)
@@ -201,10 +203,12 @@ func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certifica
 		certificate.Status.Arn = ""
 		certificate.Status.State = ""
 		certificate.Status.InUse = false
+		certificate.Status.Ready = false
 	} else {
 		certificate.Status.Arn = *cd.CertificateArn
 		certificate.Status.State = string(cd.Status)
 		certificate.Status.InUse = len(cd.InUseBy) > 0
+		certificate.Status.Ready = *cd.CertificateArn != "" && cd.Status == acmtypes.CertificateStatusIssued
 	}
 
 	ctx.Log.V(1).Info("updating TenantCertificate status")

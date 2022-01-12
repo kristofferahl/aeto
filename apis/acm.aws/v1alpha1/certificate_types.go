@@ -69,14 +69,18 @@ type CertificateStatus struct {
 
 	// InUse declares if the AWS ACM Certificate is in use.
 	InUse bool `json:"inUse,omitempty"`
+
+	// Ready is true when the resource is created and valid
+	Ready bool `json:"ready,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="DomainName",priority=0,type=string,JSONPath=`.spec.domainName`
-//+kubebuilder:printcolumn:name="State",priority=0,type=string,JSONPath=`.status.state`
+//+kubebuilder:printcolumn:name="State",priority=1,type=string,JSONPath=`.status.state`
 //+kubebuilder:printcolumn:name="InUse",priority=1,type=boolean,JSONPath=`.status.inUse`
 //+kubebuilder:printcolumn:name="Arn",priority=1,type=string,JSONPath=`.status.arn`
+//+kubebuilder:printcolumn:name="Ready",priority=0,type=boolean,JSONPath=`.status.ready`
 
 // Certificate is the Schema for the certificates API
 type Certificate struct {

@@ -135,11 +135,21 @@ func (c Clients) GetRoute53HostedZoneByName(ctx context.Context, name string) (r
 
 // UpsertRoute53ResourceRecordSet creates or updates a resource recordset in the specified hosted zone
 func (c Clients) UpsertRoute53ResourceRecordSet(ctx context.Context, hostedZoneId string, recordSet route53types.ResourceRecordSet, description string) error {
+	return c.route53ResourceRecordSetAction(ctx, route53types.ChangeActionUpsert, hostedZoneId, recordSet, description)
+}
+
+// DeleteRoute53ResourceRecordSet deletes a resource recordset in the specified hosted zone
+func (c Clients) DeleteRoute53ResourceRecordSet(ctx context.Context, hostedZoneId string, recordSet route53types.ResourceRecordSet, description string) error {
+	return c.route53ResourceRecordSetAction(ctx, route53types.ChangeActionDelete, hostedZoneId, recordSet, description)
+}
+
+// DeleteRoute53ResourceRecordSet deletes a resource recordset in the specified hosted zone
+func (c Clients) route53ResourceRecordSetAction(ctx context.Context, action route53types.ChangeAction, hostedZoneId string, recordSet route53types.ResourceRecordSet, description string) error {
 	params := route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &route53types.ChangeBatch{
 			Changes: []route53types.Change{
 				{
-					Action:            route53types.ChangeActionUpsert,
+					Action:            action,
 					ResourceRecordSet: &recordSet,
 				},
 			},
