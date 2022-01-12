@@ -132,3 +132,22 @@ func (c Clients) GetRoute53HostedZoneByName(ctx context.Context, name string) (r
 
 	return route53types.HostedZone{}, fmt.Errorf("no AWS Route53 HostedZone found matching the name %s", name)
 }
+
+// UpsertRoute53ResourceRecordSet creates or updates a resource recordset in the specified hosted zone
+func (c Clients) UpsertRoute53ResourceRecordSet(ctx context.Context, hostedZoneId string, recordSet route53types.ResourceRecordSet, description string) error {
+	params := route53.ChangeResourceRecordSetsInput{
+		ChangeBatch: &route53types.ChangeBatch{
+			Changes: []route53types.Change{
+				{
+					Action:            route53types.ChangeActionUpsert,
+					ResourceRecordSet: &recordSet,
+				},
+			},
+			Comment: aws.String(description),
+		},
+		HostedZoneId: aws.String(hostedZoneId),
+	}
+
+	_, err := c.Route53.ChangeResourceRecordSets(ctx, &params)
+	return err
+}

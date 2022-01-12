@@ -36,6 +36,24 @@ type CertificateSpec struct {
 	// Tags defines the tags to apply to the certificate
 	// +kubebuilder:validation:Optional
 	Tags map[string]string `json:"tags,omitempty"`
+
+	// Validation defines the certificate validation strategy to use
+	// +kubebuilder:validation:Optional
+	Validation *CertificateValidation `json:"validation,omitempty"`
+}
+
+// CertificateValidation defines the certificate validation strategy
+type CertificateValidation struct {
+	// Dns defines the dns certificate validation strategy
+	// +kubebuilder:validation:Optional
+	Dns *CertificateDnsValidation `json:"dns,omitempty"`
+}
+
+// CertificateDnsValidation defines the DNS validation strategy
+type CertificateDnsValidation struct {
+	// HostedZoneId defines the id of the hosted zone to put DNS validation records in
+	// +kubebuilder:validation:Required
+	HostedZonedId string `json:"hostedZoneId"`
 }
 
 // CertificateStatus defines the observed state of Certificate

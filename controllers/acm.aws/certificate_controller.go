@@ -19,6 +19,7 @@ package acmaws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,6 +30,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	awsclients "github.com/kristofferahl/aeto/internal/pkg/aws"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
@@ -74,6 +77,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	results = append(results, certificateResult)
 
 	if results.Success() {
+		validationResult := r.reconcileCertificateValidation(rctx, certificate, cd)
+		results = append(results, validationResult)
+
 		statusResult := r.reconcileStatus(rctx, certificate, cd)
 		results = append(results, statusResult)
 	}
@@ -129,6 +135,65 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 
 	// No arn set yet, retry in 15
 	return nil, ctx.RequeueIn(15)
+}
+
+func (r *CertificateReconciler) reconcileCertificateValidation(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, details *acmtypes.CertificateDetail) reconcile.Result {
+	if details == nil {
+		return ctx.RequeueIn(15)
+	}
+
+	if certificate.Spec.Validation != nil {
+		switch details.Status {
+		case acmtypes.CertificateStatusPendingValidation:
+			if certificate.Spec.Validation.Dns != nil {
+				return r.reconcileCertificateDnsValidationRecord(ctx, certificate.Spec.Validation.Dns.HostedZonedId, *details)
+			}
+		case acmtypes.CertificateStatusIssued:
+			break
+		default:
+			ctx.Log.Info("unhandled status for AWS ACM Certificate", "status", details.Status, "arn", *details.CertificateArn)
+		}
+	}
+
+	return ctx.Done()
+}
+
+func (r *CertificateReconciler) reconcileCertificateDnsValidationRecord(ctx reconcile.Context, hostedZoneId string, details acmtypes.CertificateDetail) reconcile.Result {
+	dvoCount := len(details.DomainValidationOptions)
+	if dvoCount != 1 {
+		return ctx.Error(fmt.Errorf("AWS ACM Certificate domain validation options had %d item(s), expected 1", dvoCount))
+	}
+
+	dvo := details.DomainValidationOptions[0]
+	if dvo.ValidationMethod != acmtypes.ValidationMethodDns {
+		return ctx.Error(fmt.Errorf("AWS ACM Certificate domain validation method mismatch, expected %s but was %s", acmtypes.ValidationMethodDns, dvo.ValidationMethod))
+	}
+
+	if dvo.ResourceRecord == nil {
+		ctx.Log.V(1).Info("AWS ACM Certificate domain validation option is missing it's resource record, retrying...", "domain-name", details.DomainName, "arn", details.CertificateArn)
+		return ctx.RequeueIn(5)
+	}
+
+	recordSet := route53types.ResourceRecordSet{
+		Name: dvo.ResourceRecord.Name,
+		Type: route53types.RRTypeCname,
+		ResourceRecords: []route53types.ResourceRecord{
+			{
+				Value: dvo.ResourceRecord.Value,
+			},
+		},
+		TTL: aws.Int64(300),
+	}
+
+	ctx.Log.V(1).Info("reconciling DNS validation record for AWS ACM Certificate", "domain-name", details.DomainName, "arn", details.CertificateArn)
+	err := r.AWS.UpsertRoute53ResourceRecordSet(ctx.Context, hostedZoneId, recordSet, "Upserting AWS ACM Certificate domain validation CNAME record in Hosted Zone")
+	if err != nil {
+		ctx.Log.Error(err, "failed to reconcile AWS ACM Certificate DNS validation record", "domain-name", details.DomainName, "arn", details.CertificateArn)
+		return ctx.Error(err)
+	}
+
+	// While wating for validation to complete, requeue in short intervals
+	return ctx.RequeueIn(15)
 }
 
 func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, cd *acmtypes.CertificateDetail) reconcile.Result {

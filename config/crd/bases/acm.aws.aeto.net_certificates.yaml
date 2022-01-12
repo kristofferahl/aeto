@@ -60,6 +60,21 @@ spec:
                   type: string
                 description: Tags defines the tags to apply to the certificate
                 type: object
+              validation:
+                description: Validation defines the certificate validation strategy
+                  to use
+                properties:
+                  dns:
+                    description: Dns defines the dns certificate validation strategy
+                    properties:
+                      hostedZoneId:
+                        description: HostedZoneId defines the id of the hosted zone
+                          to put DNS validation records in
+                        type: string
+                    required:
+                    - hostedZoneId
+                    type: object
+                type: object
             required:
             - domainName
             type: object
