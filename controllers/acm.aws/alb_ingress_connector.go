@@ -9,6 +9,7 @@ import (
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
+	"github.com/kristofferahl/aeto/internal/pkg/util"
 )
 
 const (
@@ -57,7 +58,7 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 			arns := strings.Split(operatorStaticCertArnAnnotationValue, ",")
 
 			for _, certificateArn := range certificateArns {
-				if !SliceContainsString(arns, certificateArn) {
+				if !util.SliceContainsString(arns, certificateArn) {
 					arns = append(arns, certificateArn)
 				}
 			}
@@ -103,14 +104,4 @@ func (c AlbIngressControllerConnector) GetIngressList(ctx reconcile.Context) ([]
 	}
 
 	return filteredList, ctx.Done()
-}
-
-// SliceContainsString returns true when s is found in the slice
-func SliceContainsString(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
 }

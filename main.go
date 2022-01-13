@@ -19,7 +19,9 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -41,6 +43,7 @@ import (
 	"github.com/kristofferahl/aeto/internal/pkg/aws"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
+	"github.com/kristofferahl/aeto/internal/pkg/util"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
@@ -72,6 +75,7 @@ func main() {
 
 	var operatorNamespace string
 	var operatorReconcileInterval time.Duration
+	var operatorEnabledControllers string
 
 	// Kubebuilder flags
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -93,6 +97,23 @@ func main() {
 	// Operator environment overrides
 	operatorNamespace = config.StringEnvVar("OPERATOR_NAMESPACE", operatorNamespace)
 	operatorReconcileInterval = config.DurationEnvVar("OPERATOR_RECONCILE_INTERVAL", operatorReconcileInterval)
+	operatorEnabledControllers = config.StringEnvVar("OPERATOR_ENABLED_CONTROLLERS", strings.Join([]string{
+		"Tenant",
+		"ResourceTemplate",
+		"Blueprint",
+		"ResourceSet",
+		"HostedZone",
+		"Certificate",
+		"CertificateConnector",
+	}, ","))
+
+	enabledControllers := strings.Split(strings.TrimLeft(strings.TrimRight(operatorEnabledControllers, ","), ","), ",")
+	if len(enabledControllers) < 1 {
+		setupLog.Error(fmt.Errorf("no controllers enabled"), "bootstrap failed")
+		os.Exit(1)
+	}
+
+	setupLog.Info("bootstrapping operator", "controllers", enabledControllers)
 
 	// Configure operator
 	config.Operator = config.OperatorConfig{
@@ -132,7 +153,7 @@ func main() {
 
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
 	if err != nil {
-		setupLog.Error(err, "unable to create dynamic client")
+		setupLog.Error(err, "unable to create discovery client")
 		os.Exit(1)
 	}
 
@@ -141,59 +162,73 @@ func main() {
 		DiscoveryClient: discoveryClient,
 	}
 
-	if err = (&corecontrollers.TenantReconciler{
-		Client:   mgr.GetClient(),
-		Dynamic:  dynamicClients,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("tenant-controller"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Tenant")
-		os.Exit(1)
+	if util.SliceContainsString(enabledControllers, "Tenant") {
+		if err = (&corecontrollers.TenantReconciler{
+			Client:   mgr.GetClient(),
+			Dynamic:  dynamicClients,
+			Scheme:   mgr.GetScheme(),
+			Recorder: mgr.GetEventRecorderFor("tenant-controller"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Tenant")
+			os.Exit(1)
+		}
 	}
-	if err = (&corecontrollers.ResourceTemplateReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ResourceTemplate")
-		os.Exit(1)
+	if util.SliceContainsString(enabledControllers, "ResourceTemplate") {
+		if err = (&corecontrollers.ResourceTemplateReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ResourceTemplate")
+			os.Exit(1)
+		}
 	}
-	if err = (&corecontrollers.BlueprintReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Blueprint")
-		os.Exit(1)
+	if util.SliceContainsString(enabledControllers, "Blueprint") {
+		if err = (&corecontrollers.BlueprintReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Blueprint")
+			os.Exit(1)
+		}
 	}
-	if err = (&corecontrollers.ResourceSetReconciler{
-		Client:  mgr.GetClient(),
-		Dynamic: dynamicClients,
-		Scheme:  mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ResourceSet")
-		os.Exit(1)
+	if util.SliceContainsString(enabledControllers, "ResourceSet") {
+		if err = (&corecontrollers.ResourceSetReconciler{
+			Client:  mgr.GetClient(),
+			Dynamic: dynamicClients,
+			Scheme:  mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ResourceSet")
+			os.Exit(1)
+		}
 	}
-	if err = (&route53awscontrollers.HostedZoneReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		AWS:    awsClients,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "HostedZone")
-		os.Exit(1)
+	if util.SliceContainsString(enabledControllers, "HostedZone") {
+		if err = (&route53awscontrollers.HostedZoneReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			AWS:    awsClients,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "HostedZone")
+			os.Exit(1)
+		}
 	}
-	if err = (&acmawscontrollers.CertificateReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		AWS:    awsClients,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Certificate")
-		os.Exit(1)
+	if util.SliceContainsString(enabledControllers, "Certificate") {
+		if err = (&acmawscontrollers.CertificateReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			AWS:    awsClients,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Certificate")
+			os.Exit(1)
+		}
 	}
-	if err = (&acmawscontrollers.CertificateConnectorReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "CertificateConnector")
-		os.Exit(1)
+	if util.SliceContainsString(enabledControllers, "CertificateConnector") {
+		if err = (&acmawscontrollers.CertificateConnectorReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "CertificateConnector")
+			os.Exit(1)
+		}
 	}
 	//+kubebuilder:scaffold:builder
 
