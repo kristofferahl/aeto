@@ -33,11 +33,11 @@ type CertificateSpec struct {
 	// +kubebuilder:validation:Required
 	DomainName string `json:"domainName"`
 
-	// Tags defines the tags to apply to the certificate
+	// Tags defines the tags to apply to the resource.
 	// +kubebuilder:validation:Optional
 	Tags map[string]string `json:"tags,omitempty"`
 
-	// Validation defines the certificate validation strategy to use
+	// Validation defines the certificate validation strategy to use.
 	// +kubebuilder:validation:Optional
 	Validation *CertificateValidation `json:"validation,omitempty"`
 }

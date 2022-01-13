@@ -62,11 +62,11 @@ spec:
               tags:
                 additionalProperties:
                   type: string
-                description: Tags defines the tags to apply to the certificate
+                description: Tags defines the tags to apply to the resource.
                 type: object
               validation:
                 description: Validation defines the certificate validation strategy
-                  to use
+                  to use.
                 properties:
                   dns:
                     description: Dns defines the dns certificate validation strategy

@@ -123,6 +123,13 @@ func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hosted
 			return nil, nil, ctx.Error(err)
 		}
 
+		ctx.Log.V(1).Info("reconciling tags for AWS Route53 HostedZone", "name", *hz.Name, "id", *hz.Id)
+		err = r.AWS.SetRoute53HostedZoneTagsById(ctx.Context, *hz.Id, hostedZone.Spec.Tags)
+		if err != nil {
+			ctx.Log.Error(err, "failed to reconcile tags for AWS Route53 HostedZone", "name", *hz.Name, "id", *hz.Id, "tags", hostedZone.Spec.Tags)
+			return &hz, nil, ctx.Error(err)
+		}
+
 		if hostedZone.Spec.ConnectWith != nil {
 			hzns, err := r.getHostedZoneNsRecordSet(ctx, *hz.Id, *hz.Name)
 			if err != nil {

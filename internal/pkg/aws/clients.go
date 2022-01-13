@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
@@ -147,6 +148,63 @@ func (c Clients) FindOneRoute53HostedZoneByName(ctx context.Context, name string
 	}
 
 	return nil, nil
+}
+
+// SetRoute53HostedZoneTagsById adds, removes and updates tags for the Route53 HostedZone by Id
+func (c Clients) SetRoute53HostedZoneTagsById(ctx context.Context, id string, tags map[string]string) error {
+	id = strings.ReplaceAll(id, "/hostedzone/", "")
+
+	tagsRes, err := c.Route53.ListTagsForResource(ctx, &route53.ListTagsForResourceInput{
+		ResourceId:   aws.String(id),
+		ResourceType: route53types.TagResourceTypeHostedzone,
+	})
+	if err != nil {
+		return err
+	}
+
+	remove := make([]string, 0)
+	add := make([]route53types.Tag, 0)
+
+	for _, tag := range tagsRes.ResourceTagSet.Tags {
+		if val, ok := tags[*tag.Key]; ok {
+			if *tag.Value != val {
+				remove = append(remove, *tag.Key)
+			}
+		} else {
+			remove = append(remove, *tag.Key)
+		}
+	}
+
+	for key, value := range tags {
+		add = append(add, route53types.Tag{
+			Key:   aws.String(key),
+			Value: aws.String(value),
+		})
+	}
+
+	params := route53.ChangeTagsForResourceInput{
+		ResourceId:   aws.String(id),
+		ResourceType: route53types.TagResourceTypeHostedzone,
+	}
+
+	if len(add) == 0 && len(remove) == 0 {
+		return nil
+	}
+
+	if len(add) > 0 {
+		params.AddTags = add
+	}
+
+	if len(remove) > 0 {
+		params.RemoveTagKeys = remove
+	}
+
+	_, err = c.Route53.ChangeTagsForResource(ctx, &params)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // UpsertRoute53ResourceRecordSet creates or updates a resource recordset in the specified hosted zone

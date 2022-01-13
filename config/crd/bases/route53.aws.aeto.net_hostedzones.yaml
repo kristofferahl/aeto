@@ -74,6 +74,11 @@ spec:
               name:
                 description: Name is the desired name for the AWS Route53 HostedZone.
                 type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: Tags defines the tags to apply to the resource.
+                type: object
             required:
             - name
             type: object

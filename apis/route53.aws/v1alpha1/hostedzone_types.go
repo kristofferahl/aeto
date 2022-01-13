@@ -33,6 +33,10 @@ type HostedZoneSpec struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
+	// Tags defines the tags to apply to the resource.
+	// +kubebuilder:validation:Optional
+	Tags map[string]string `json:"tags,omitempty"`
+
 	// ConnectWith tells the operator to connect the HostedZone with a parent hosted zone by upserting it's NS recordset.
 	// +kubebuilder:validation:Optional
 	ConnectWith *HostedZoneConnection `json:"connectWith,omitempty"`
