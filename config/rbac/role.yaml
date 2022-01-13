@@ -9,6 +9,32 @@ rules:
 - apiGroups:
   - acm.aws.aeto.net
   resources:
+  - certificateconnectors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - acm.aws.aeto.net
+  resources:
+  - certificateconnectors/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - acm.aws.aeto.net
+  resources:
+  - certificateconnectors/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - acm.aws.aeto.net
+  resources:
   - certificates
   verbs:
   - create
