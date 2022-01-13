@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
 // CertificateConnectorReconciler reconciles a CertificateConnector object
@@ -47,11 +48,61 @@ type CertificateConnectorReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *CertificateConnectorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	rctx := reconcile.NewContext("certificateconnector", req, log.FromContext(ctx))
+	rctx.Log.Info("reconciling")
 
-	// your logic here
+	certificateConnector, err := r.getCertificateConnector(rctx, req)
+	if err != nil {
+		rctx.Log.Info("CertificateConnector not found")
+		// we'll ignore not-found errors, since they can't be fixed by an immediate
+		// requeue (we'll need to wait for a new notification), and we can get them
+		// on deleted requests.
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	rctx.Log.V(1).Info("found CertificateConnector", "certificate-connector", certificateConnector.NamespacedName())
 
-	return ctrl.Result{}, nil
+	results := reconcile.ResultList{}
+
+	certificates, listRes := r.getCertificates(rctx, certificateConnector)
+	results = append(results, listRes)
+	if results.Success() {
+		connector, err := NewConnector(r.Client, certificateConnector)
+		if err != nil {
+			rctx.Log.Error(err, "failed to create connector", "certificate-connector", certificateConnector.NamespacedName())
+			return ctrl.Result{}, nil
+		}
+
+		connectRes := connector.Connect(rctx, certificates)
+		results = append(results, connectRes)
+	}
+
+	return rctx.Complete(results...)
+}
+
+func (r *CertificateConnectorReconciler) getCertificateConnector(ctx reconcile.Context, req ctrl.Request) (acmawsv1alpha1.CertificateConnector, error) {
+	var connector acmawsv1alpha1.CertificateConnector
+	if err := r.Get(ctx.Context, req.NamespacedName, &connector); err != nil {
+		return acmawsv1alpha1.CertificateConnector{}, err
+	}
+	return connector, nil
+}
+
+func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector) ([]acmawsv1alpha1.Certificate, reconcile.Result) {
+	selector := connector.Spec.Certificates.Selector
+
+	var list acmawsv1alpha1.CertificateList
+	if err := r.List(ctx.Context, &list, selector.ListOptions()); err != nil {
+		return []acmawsv1alpha1.Certificate{}, ctx.Error(err)
+	}
+
+	filteredList := make([]acmawsv1alpha1.Certificate, 0)
+	for _, item := range list.Items {
+		if selector.Match(item.ObjectMeta) {
+			filteredList = append(filteredList, item)
+		}
+	}
+
+	return filteredList, ctx.Done()
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -1,4 +1,5 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
+  - acm.aws_v1alpha1_certificateconnector.yaml
   - core_v1alpha1_tenant.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

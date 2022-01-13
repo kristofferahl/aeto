@@ -37,10 +37,74 @@ spec:
           spec:
             description: CertificateConnectorSpec defines the desired state of CertificateConnector
             properties:
-              foo:
-                description: Foo is an example field of CertificateConnector. Edit
-                  certificateconnector_types.go to remove/update
-                type: string
+              certificates:
+                description: Certificates describes the certificates to connect.
+                properties:
+                  selector:
+                    description: Selector specifies the selectors that need to match
+                      on a resource.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations specifies the required annotations
+                          on a resource.
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: Labels specifies the required labels on a resource.
+                        type: object
+                      namespaces:
+                        description: Namespaces specifies the namespaces to include
+                          resources from.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - annotations
+                    - labels
+                    - namespaces
+                    type: object
+                required:
+                - selector
+                type: object
+              ingress:
+                description: Ingress describes the ingress resources to update.
+                properties:
+                  connector:
+                    description: Connector defines the type of connector to use.
+                    type: string
+                  selector:
+                    description: Selector specifies the selectors that need to match
+                      on a resource.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations specifies the required annotations
+                          on a resource.
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: Labels specifies the required labels on a resource.
+                        type: object
+                      namespaces:
+                        description: Namespaces specifies the namespaces to include
+                          resources from.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - annotations
+                    - labels
+                    - namespaces
+                    type: object
+                required:
+                - connector
+                - selector
+                type: object
             type: object
           status:
             description: CertificateConnectorStatus defines the observed state of
