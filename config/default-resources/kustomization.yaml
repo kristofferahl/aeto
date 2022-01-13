@@ -5,3 +5,4 @@ resources:
   - default-network-policy-template.yaml
   - default-limit-range-template.yaml
   - default-route53-hostedzone-template.yaml
+  - default-acm-certificate-template.yaml

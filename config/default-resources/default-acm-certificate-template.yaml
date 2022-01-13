@@ -1,0 +1,24 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: ResourceTemplate
+metadata:
+  name: default-acm-certificate-template
+spec:
+  rules:
+    name: tenant
+    namespace: operator
+  parameters:
+    - name: DomainName
+    - name: HostedZoneId
+  resources:
+    - apiVersion: acm.aws.aeto.net/v1alpha1
+      kind: Certificate
+      metadata:
+        name: "injected"
+      spec:
+        domainName: '*.{{ .String "DomainName" }}'
+        tags:
+          "Name": "{{ .ResourceNamePrefix }}{{ .Key }}"
+          "ManagedBy": "aeto"
+        validation:
+          dns:
+            hostedZoneId: '{{ .String "HostedZoneId" }}'

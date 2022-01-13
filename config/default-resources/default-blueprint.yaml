@@ -2,10 +2,6 @@ apiVersion: core.aeto.net/v1alpha1
 kind: Blueprint
 metadata:
   name: default
-  labels:
-    environment: dev
-  annotations:
-    aeto.net/ttl: enabled
 spec:
   resourceNamePrefix: tenant-
   resources:
@@ -24,36 +20,20 @@ spec:
       template: default-route53-hostedzone-template
       parameters:
         - name: ParentHostedZoneName
-          value: apps.aeto.net
-    # - name: certificate
-    #   template: default-certificatemanager-certificate-template
-    #   parameters:
-    #     - name: DomainName
-    #       valueFrom:
-    #         blueprint:
-    #           resourceGroup: hosted_zone
-    #           jsonPath: .resources[0].spec.name
-    #     - name: HostedZoneId
-    #       valueFrom:
-    #         resource:
-    #           apiVersion: route53.aws.aeto.net/v1alpha1
-    #           kind: HostedZone
-    #           name: "$TENANT_NAME"
-    #           namespace: "$TENANT_NAMESPACE"
-    #           jsonPath: .status.hostedZoneID
-    # - name: ref_test
-    #   template: temp-configmap
-    #   parameters:
-    #     - name: BlueprintRef
-    #       valueFrom:
-    #         blueprint:
-    #           resourceGroup: limit_range
-    #           jsonPath: .resources[0].spec.limits[0].default.cpu
-    #     - name: ResourceRef
-    #       valueFrom:
-    #         resource:
-    #           apiVersion: v1
-    #           kind: Pod
-    #           name: etcd-kind-control-plane
-    #           namespace: kube-system
-    #           jsonPath: .status.hostIP
+          value: aeto.net
+    - name: certificate
+      template: default-acm-certificate-template
+      parameters:
+        - name: DomainName
+          valueFrom:
+            blueprint:
+              resourceGroup: hosted_zone
+              jsonPath: .resources[0].spec.name
+        - name: HostedZoneId
+          valueFrom:
+            resource:
+              apiVersion: route53.aws.aeto.net/v1alpha1
+              kind: HostedZone
+              name: "$TENANT_NAME"
+              namespace: "$OPERATOR_NAMESPACE"
+              jsonPath: .status.id
