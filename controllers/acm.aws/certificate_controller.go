@@ -211,9 +211,9 @@ func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certifica
 		certificate.Status.Ready = *cd.CertificateArn != "" && cd.Status == acmtypes.CertificateStatusIssued
 	}
 
-	ctx.Log.V(1).Info("updating TenantCertificate status")
+	ctx.Log.V(1).Info("updating Certificate status")
 	if err := r.Status().Update(ctx.Context, &certificate); err != nil {
-		ctx.Log.Error(err, "failed to update TenantCertificate status")
+		ctx.Log.Error(err, "failed to update Certificate status")
 		return ctx.Error(err)
 	}
 
