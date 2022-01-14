@@ -20,14 +20,14 @@ type Clients struct {
 
 // FindOneAcmCertificateByDomainName returns the first matching ACM Certificate by domain name
 func (c Clients) FindOneAcmCertificateByDomainName(ctx context.Context, domainName string) (*acmtypes.CertificateSummary, error) {
-	res, err := c.Acm.ListCertificates(ctx, &acm.ListCertificatesInput{})
+	items, err := c.ListAcmCertificates(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	matches := make([]acmtypes.CertificateSummary, 0)
 
-	for _, cert := range res.CertificateSummaryList {
+	for _, cert := range items {
 		match := *cert.DomainName == domainName
 		if match {
 			matches = append(matches, cert)
@@ -55,6 +55,26 @@ func (c Clients) GetAcmCertificateDetailsByArn(ctx context.Context, arn string) 
 	}
 
 	return *res.Certificate, nil
+}
+
+// ListAcmCertificates returns all ACM Certificates
+func (c Clients) ListAcmCertificates(ctx context.Context) ([]acmtypes.CertificateSummary, error) {
+	items := make([]acmtypes.CertificateSummary, 0)
+
+	paginator := acm.NewListCertificatesPaginator(c.Acm, &acm.ListCertificatesInput{
+		MaxItems: aws.Int32(5),
+	})
+	fmt.Println(fmt.Sprintf("Certificates Paginator, HasMorePages=%v", paginator.HasMorePages()))
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		fmt.Println(fmt.Sprintf("Certificates Paginator, HasMorePages=%v NextToken=%v PageItems=%d", paginator.HasMorePages(), output.NextToken, len(output.CertificateSummaryList)))
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, output.CertificateSummaryList...)
+	}
+
+	return items, nil
 }
 
 // SetAcmCertificateTagsByArn adds, removes and updates tags for the ACM Certificate by ARN
@@ -109,30 +129,16 @@ func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, arn string, tag
 	return nil
 }
 
-// GetRoute53HostedZoneById returns Route53 HostedZone by ID
-func (c Clients) GetRoute53HostedZoneById(ctx context.Context, id string) (route53types.HostedZone, error) {
-	res, err := c.Route53.GetHostedZone(ctx, &route53.GetHostedZoneInput{
-		Id: aws.String(id),
-	})
-	if err != nil {
-		return route53types.HostedZone{}, err
-	}
-
-	return *res.HostedZone, nil
-}
-
 // FindOneRoute53HostedZoneByName returns the first matching Route53 HostedZone by name
 func (c Clients) FindOneRoute53HostedZoneByName(ctx context.Context, name string) (*route53types.HostedZone, error) {
-	zones, err := c.Route53.ListHostedZonesByName(ctx, &route53.ListHostedZonesByNameInput{
-		DNSName: aws.String(name),
-	})
+	items, err := c.ListRoute53HostedZones(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	matches := make([]route53types.HostedZone, 0)
 
-	for _, zone := range zones.HostedZones {
+	for _, zone := range items {
 		match := *zone.Name == name+"."
 		if match {
 			matches = append(matches, zone)
@@ -148,6 +154,34 @@ func (c Clients) FindOneRoute53HostedZoneByName(ctx context.Context, name string
 	}
 
 	return nil, nil
+}
+
+// GetRoute53HostedZoneById returns Route53 HostedZone by ID
+func (c Clients) GetRoute53HostedZoneById(ctx context.Context, id string) (route53types.HostedZone, error) {
+	res, err := c.Route53.GetHostedZone(ctx, &route53.GetHostedZoneInput{
+		Id: aws.String(id),
+	})
+	if err != nil {
+		return route53types.HostedZone{}, err
+	}
+
+	return *res.HostedZone, nil
+}
+
+// ListRoute53HostedZones returns all Route53 HostedZones
+func (c Clients) ListRoute53HostedZones(ctx context.Context) ([]route53types.HostedZone, error) {
+	items := make([]route53types.HostedZone, 0)
+
+	paginator := route53.NewListHostedZonesPaginator(c.Route53, &route53.ListHostedZonesInput{})
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, output.HostedZones...)
+	}
+
+	return items, nil
 }
 
 // SetRoute53HostedZoneTagsById adds, removes and updates tags for the Route53 HostedZone by Id
