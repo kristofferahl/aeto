@@ -21,9 +21,15 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types" // Required for Watching
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder" // Required for Watching
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler" // Required for Watching
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"            // Required for Watching
+	kreconcile "sigs.k8s.io/controller-runtime/pkg/reconcile" // Required for Watching
+	"sigs.k8s.io/controller-runtime/pkg/source"               // Required for Watching
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
@@ -38,6 +44,7 @@ type CertificateConnectorReconciler struct {
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors/finalizers,verbs=update
+//+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificate,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -73,10 +80,10 @@ func (r *CertificateConnectorReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		connectRes := connector.Connect(rctx, certificates)
+		changed, connectRes := connector.Connect(rctx, certificates)
 		results = append(results, connectRes)
 
-		if results.Success() {
+		if changed {
 			statusResult := r.reconcileStatus(rctx, certificateConnector)
 			results = append(results, statusResult)
 		}
@@ -127,5 +134,33 @@ func (r *CertificateConnectorReconciler) reconcileStatus(ctx reconcile.Context, 
 func (r *CertificateConnectorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&acmawsv1alpha1.CertificateConnector{}).
+		Watches(
+			&source.Kind{Type: &acmawsv1alpha1.Certificate{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForConfigMap),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
+}
+
+func (r *CertificateConnectorReconciler) findObjectsForConfigMap(certificate client.Object) []kreconcile.Request {
+	certificateConnectorList := &acmawsv1alpha1.CertificateConnectorList{}
+	listOps := &client.ListOptions{
+		//FieldSelector: fields.OneTermEqualSelector(configMapField, certificate.GetName()),
+		Namespace: "default",
+	}
+	err := r.List(context.TODO(), certificateConnectorList, listOps)
+	if err != nil {
+		return []kreconcile.Request{}
+	}
+
+	requests := make([]kreconcile.Request, len(certificateConnectorList.Items))
+	for i, item := range certificateConnectorList.Items {
+		requests[i] = kreconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+			},
+		}
+	}
+	return requests
 }

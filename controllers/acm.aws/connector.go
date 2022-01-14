@@ -12,7 +12,7 @@ import (
 // Connector defines a connector of certificates
 type Connector interface {
 	// Connect reconciles certificate connections
-	Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) reconcile.Result
+	Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) (changed bool, result reconcile.Result)
 }
 
 // NewConnector returns a Connector

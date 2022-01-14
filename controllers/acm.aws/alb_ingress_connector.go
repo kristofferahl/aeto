@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
@@ -30,7 +31,7 @@ type AlbIngressControllerConnector struct {
 }
 
 // Connect reconciles certificate connections for ALB Ingress Controller
-func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) reconcile.Result {
+func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) (changed bool, result reconcile.Result) {
 	certificateArns := make([]string, 0)
 	for _, certificate := range certificates {
 		if certificate.Status.Ready && certificate.Status.Arn != "" {
@@ -40,9 +41,10 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 
 	ingresses, ingressRes := c.GetIngressList(ctx)
 	if ingressRes.IsError() {
-		return ingressRes
+		return false, ingressRes
 	}
 
+	changes := make([]string, 0)
 	errors := make([]error, 0)
 	for _, ingress := range ingresses {
 		operatorControlledAnnotationValue := ingress.Annotations[AlbIngressControllerIngressAnnotation_OperatorControlled]
@@ -76,16 +78,21 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 				errors = append(errors, err)
 				continue
 			}
+
+			changes = append(changes, types.NamespacedName{
+				Namespace: ingress.Namespace,
+				Name:      ingress.Name,
+			}.String())
 		} else {
 			ctx.Log.V(1).Info("Ingress certificates in sync", "namespace", ingress.Namespace, "name", ingress.Name, "current-arns", certArnAnnotationValue)
 		}
 	}
 
 	if len(errors) == 0 {
-		return ctx.Done()
+		return len(changes) > 0, ctx.Done()
 	}
 
-	return ctx.Error(fmt.Errorf("one ore more errors occured when connecting certificates to ingresses; %v", errors))
+	return len(changes) > 0, ctx.Error(fmt.Errorf("one ore more errors occured when connecting certificates to ingresses; %v", errors))
 }
 
 func (c AlbIngressControllerConnector) GetIngressList(ctx reconcile.Context) ([]networkingv1.Ingress, reconcile.Result) {
