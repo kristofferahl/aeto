@@ -84,10 +84,14 @@ type SelectorSpec struct {
 type CertificateConnectorStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// LastUpdated is true when the resource is created and valid
+	LastUpdated string `json:"lastUpdated,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="LastUpdated",priority=1,type=string,JSONPath=`.status.lastUpdated`
 
 // CertificateConnector is the Schema for the certificateconnectors API
 type CertificateConnector struct {

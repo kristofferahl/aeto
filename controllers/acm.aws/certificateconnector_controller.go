@@ -18,6 +18,7 @@ package acmaws
 
 import (
 	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -74,6 +75,11 @@ func (r *CertificateConnectorReconciler) Reconcile(ctx context.Context, req ctrl
 
 		connectRes := connector.Connect(rctx, certificates)
 		results = append(results, connectRes)
+
+		if results.Success() {
+			statusResult := r.reconcileStatus(rctx, certificateConnector)
+			results = append(results, statusResult)
+		}
 	}
 
 	return rctx.Complete(results...)
@@ -103,6 +109,18 @@ func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, 
 	}
 
 	return filteredList, ctx.Done()
+}
+
+func (r *CertificateConnectorReconciler) reconcileStatus(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector) reconcile.Result {
+	connector.Status.LastUpdated = time.Now().UTC().Format(time.UnixDate)
+
+	ctx.Log.V(1).Info("updating CertificateConnector status")
+	if err := r.Status().Update(ctx.Context, &connector); err != nil {
+		ctx.Log.Error(err, "failed to update CertificateConnector status")
+		return ctx.Error(err)
+	}
+
+	return ctx.Done()
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -16,7 +16,12 @@ spec:
     singular: certificateconnector
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.lastUpdated
+      name: LastUpdated
+      priority: 1
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: CertificateConnector is the Schema for the certificateconnectors
@@ -109,6 +114,11 @@ spec:
           status:
             description: CertificateConnectorStatus defines the observed state of
               CertificateConnector
+            properties:
+              lastUpdated:
+                description: LastUpdated is true when the resource is created and
+                  valid
+                type: string
             type: object
         type: object
     served: true
