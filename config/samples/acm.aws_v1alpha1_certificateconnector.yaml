@@ -12,7 +12,7 @@ metadata:
     alb.ingress.kubernetes.io/actions.ping: '{"Type": "fixed-response", "FixedResponseConfig": {"ContentType":"text/plain", "StatusCode":"200", "MessageBody":"Pong"}}'
 spec:
   rules:
-    - host: alb.aeto.net
+    - host: loadbalancer.aeto.net
       http:
         paths:
           - path: /ping

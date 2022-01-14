@@ -2,6 +2,8 @@ apiVersion: core.aeto.net/v1alpha1
 kind: Blueprint
 metadata:
   name: default
+  labels:
+    aeto.net/blueprint: default
 spec:
   resourceNamePrefix: tenant-
   resources:
@@ -37,3 +39,15 @@ spec:
               name: "$TENANT_NAME"
               namespace: "$OPERATOR_NAMESPACE"
               jsonPath: .status.id
+    - name: landing_page
+      template: default-landing-page-template
+      parameters:
+        - name: IngressClass
+          value: traefik
+        - name: ExternalDnsTarget
+          value: loadbalancer.aeto.net
+        - name: IngressHost
+          valueFrom:
+            blueprint:
+              resourceGroup: hosted_zone
+              jsonPath: .resources[0].spec.name

@@ -1,0 +1,88 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: ResourceTemplate
+metadata:
+  name: default-landing-page-template
+spec:
+  rules:
+    name: tenant
+    namespace: tenant
+  parameters:
+    - name: IngressClass
+    - name: ExternalDnsTarget
+    - name: IngressHost
+  resources:
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        labels:
+          app.kubernetes.io/name: go-landing
+      spec:
+        replicas: 1
+        strategy:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: go-landing
+        template:
+          metadata:
+            labels:
+              app.kubernetes.io/name: go-landing
+          spec:
+            containers:
+              - name: go-landing
+                image: kristofferahl/go-landing:v1.0.0
+                imagePullPolicy: Always
+                env:
+                  - name: LANDING_TITLE
+                    value: "{{ .Name }}"
+                  - name: LANDING_DESCRIPTION
+                    value: "powered by // aeto (aws-eks-tenant-operator)"
+                ports:
+                  - name: web
+                    containerPort: 9000
+                    protocol: TCP
+                resources:
+                  limits:
+                    cpu: 50m
+                    memory: 50Mi
+                  requests:
+                    cpu: 25m
+                    memory: 25Mi
+            restartPolicy: Always
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        labels:
+          app.kubernetes.io/name: go-landing
+      spec:
+        type: ClusterIP
+        selector:
+          app.kubernetes.io/name: go-landing
+        ports:
+          - name: web
+            port: 9000
+            protocol: TCP
+            targetPort: web
+    - apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: go-landing
+        annotations:
+          kubernetes.io/ingress.class: '{{ .String "IngressClass" }}'
+          external-dns.alpha.kubernetes.io/target: '{{ .String "ExternalDnsTarget" }}'
+          external-dns.alpha.kubernetes.io/ttl: "300"
+      spec:
+        rules:
+          - host: 'www.{{ .String "IngressHost" }}'
+            http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: go-landing
+                      port:
+                        name: web

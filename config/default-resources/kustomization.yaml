@@ -6,3 +6,4 @@ resources:
   - default-limit-range-template.yaml
   - default-route53-hostedzone-template.yaml
   - default-acm-certificate-template.yaml
+  - default-landing-page-template.yaml
