@@ -9,3 +9,14 @@ func SliceContainsString(slice []string, s string) bool {
 	}
 	return false
 }
+
+// SliceRemoveString removes s from the slice and returns a new slice without s
+func SliceRemoveString(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
+		}
+		result = append(result, item)
+	}
+	return
+}

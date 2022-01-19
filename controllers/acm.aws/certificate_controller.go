@@ -37,6 +37,10 @@ import (
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
+const (
+	FinalizerName = "certificate.acm.aws.aeto.net/finalizer"
+)
+
 // CertificateReconciler reconciles a Certificate object
 type CertificateReconciler struct {
 	client.Client
@@ -70,6 +74,16 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	rctx.Log.V(1).Info("found Certificate", "certificate", certificate.NamespacedName())
+
+	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
+		certificate := certificate
+		return r.reconcileDelete(c, certificate)
+	})
+	res, err := reconcile.WithFinalizer(r.Client, rctx, &certificate, finalizer)
+	if res != nil || err != nil {
+		rctx.Log.V(1).Info("returning finalizer results for Certificate", "certificate", certificate.NamespacedName(), "res", res, "error", err)
+		return *res, err
+	}
 
 	results := reconcile.ResultList{}
 
@@ -139,22 +153,16 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 
 func (r *CertificateReconciler) reconcileCertificateValidation(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, details *acmtypes.CertificateDetail) reconcile.Result {
 	if details == nil {
+		ctx.Log.V(1).Info("waiting for details on AWS ACM Certificate, skipping reconcile of certificate validation")
 		return ctx.RequeueIn(15)
 	}
 
 	if certificate.Spec.Validation != nil {
-		switch details.Status {
-		case acmtypes.CertificateStatusPendingValidation:
-			if certificate.Spec.Validation.Dns != nil {
-				return r.reconcileCertificateDnsValidationRecord(ctx, certificate.Spec.Validation.Dns.HostedZonedId, *details)
-			}
-		case acmtypes.CertificateStatusIssued:
-			// TODO: Delete validation record when issued or is it needed for renewal?
-			// https://docs.aws.amazon.com/acm/latest/userguide/dns-renewal-validation.html
-			break
-		default:
-			ctx.Log.Info("unhandled status for AWS ACM Certificate", "status", details.Status, "arn", *details.CertificateArn)
+		if certificate.Spec.Validation.Dns != nil {
+			return r.reconcileCertificateDnsValidationRecord(ctx, certificate.Spec.Validation.Dns.HostedZonedId, *details)
 		}
+
+		ctx.Log.Info("unhandled status for AWS ACM Certificate", "status", details.Status, "arn", *details.CertificateArn)
 	}
 
 	return ctx.Done()
@@ -194,8 +202,79 @@ func (r *CertificateReconciler) reconcileCertificateDnsValidationRecord(ctx reco
 		return ctx.Error(err)
 	}
 
-	// While wating for validation to complete, requeue in short intervals
-	return ctx.RequeueIn(15)
+	if details.Status == acmtypes.CertificateStatusPendingValidation {
+		// while we wait for validation to complete, requeue in shorter intervals
+		return ctx.RequeueIn(15)
+	}
+
+	return ctx.Done()
+}
+
+func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate) reconcile.Result {
+	ca := certificate.Status.Arn
+
+	// No arn set, nothing we can do
+	if ca == "" {
+		return ctx.Done()
+	}
+
+	cd, err := r.AWS.GetAcmCertificateDetailsByArn(ctx.Context, ca)
+	if err != nil {
+		var rnfe *acmtypes.ResourceNotFoundException
+		if errors.As(err, &rnfe) {
+			ctx.Log.Info("AWS ACM Certificate details not found", "arn", ca)
+			return ctx.Done()
+		} else {
+			ctx.Log.Error(err, "failed to fetch AWS ACM Certificate", "arn", ca)
+			return ctx.Error(err)
+		}
+	}
+
+	// DNS Validation Records
+	if certificate.Spec.Validation != nil && certificate.Spec.Validation.Dns != nil {
+		for _, dvo := range cd.DomainValidationOptions {
+			if dvo.ValidationMethod == acmtypes.ValidationMethodDns {
+				// Delete validation recordset
+				recordSet := route53types.ResourceRecordSet{
+					Name: dvo.ResourceRecord.Name,
+					Type: route53types.RRTypeCname,
+					ResourceRecords: []route53types.ResourceRecord{
+						{
+							Value: dvo.ResourceRecord.Value,
+						},
+					},
+					TTL: aws.Int64(300),
+				}
+
+				ctx.Log.Info("deleting Domain Validation record for AWS ACM Certificate", "arn", ca, "hosted-zone-id", certificate.Spec.Validation.Dns.HostedZonedId, "recordset", recordSet)
+				err := r.AWS.DeleteRoute53ResourceRecordSet(ctx.Context, certificate.Spec.Validation.Dns.HostedZonedId, recordSet, "deleting DNS validation record for AWS ACM Certificate")
+				if err != nil {
+					var cbe *route53types.InvalidChangeBatch
+					if errors.As(err, &cbe) {
+						if strings.Contains(cbe.ErrorMessage(), "not found") {
+							ctx.Log.Info("ignoring change batch error", "error-message", cbe.ErrorMessage())
+						} else {
+							return ctx.Error(err)
+						}
+					} else {
+						return ctx.Error(err)
+					}
+				}
+			}
+		}
+	}
+
+	// Certificate
+	ctx.Log.Info("deleting AWS ACM Certificate", "arn", ca)
+	_, err = r.AWS.Acm.DeleteCertificate(ctx.Context, &acm.DeleteCertificateInput{
+		CertificateArn: aws.String(ca),
+	})
+	if err != nil {
+		ctx.Log.Error(err, "failed to delete AWS ACM Certificate", "arn", ca)
+		return ctx.Error(err)
+	}
+
+	return ctx.Done()
 }
 
 func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, cd *acmtypes.CertificateDetail) reconcile.Result {

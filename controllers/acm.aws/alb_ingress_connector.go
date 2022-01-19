@@ -56,18 +56,16 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 			continue
 		}
 
-		if len(certificateArns) > 0 || len(operatorStaticCertArnAnnotationValue) > 0 {
-			arns := strings.Split(operatorStaticCertArnAnnotationValue, ",")
+		arns := strings.Split(operatorStaticCertArnAnnotationValue, ",")
 
-			for _, certificateArn := range certificateArns {
-				if !util.SliceContainsString(arns, certificateArn) {
-					arns = append(arns, certificateArn)
-				}
+		for _, certificateArn := range certificateArns {
+			if !util.SliceContainsString(arns, certificateArn) {
+				arns = append(arns, certificateArn)
 			}
-
-			annotationValue := strings.TrimSuffix(strings.TrimPrefix(strings.Join(arns, ","), ","), ",")
-			ingress.Annotations[AlbIngressControllerIngressAnnotation_CertificateArnKey] = annotationValue
 		}
+
+		annotationValue := strings.TrimSuffix(strings.TrimPrefix(strings.Join(arns, ","), ","), ",")
+		ingress.Annotations[AlbIngressControllerIngressAnnotation_CertificateArnKey] = annotationValue
 
 		changed := certArnAnnotationValue != ingress.Annotations[AlbIngressControllerIngressAnnotation_CertificateArnKey]
 		if changed {
