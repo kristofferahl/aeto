@@ -34,6 +34,10 @@ import (
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
+const (
+	FinalizerName = "hostedzone.route53.aws.aeto.net/finalizer"
+)
+
 // HostedZoneReconciler reconciles a HostedZone object
 type HostedZoneReconciler struct {
 	client.Client
@@ -60,13 +64,23 @@ func (r *HostedZoneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	hostedZone, err := r.getHostedZone(rctx, req)
 	if err != nil {
-		rctx.Log.Info("HostedZone not found", req.NamespacedName)
+		rctx.Log.Info("HostedZone not found", "hostedzone", req.NamespacedName)
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	rctx.Log.V(1).Info("found HostedZone", "hostedzone", hostedZone.NamespacedName())
+
+	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
+		hostedZone := hostedZone
+		return r.reconcileDelete(c, hostedZone)
+	})
+	res, err := reconcile.WithFinalizer(r.Client, rctx, &hostedZone, finalizer)
+	if res != nil || err != nil {
+		rctx.Log.V(1).Info("returning finalizer results for HostedZone", "hostedzone", hostedZone.NamespacedName(), "res", res, "error", err)
+		return *res, err
+	}
 
 	results := reconcile.ResultList{}
 
@@ -182,6 +196,76 @@ func (r *HostedZoneReconciler) reconcileHostedZoneConnection(ctx reconcile.Conte
 	}
 
 	return phz, phzns, ctx.Done()
+}
+
+func (r *HostedZoneReconciler) reconcileDelete(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone) reconcile.Result {
+	id := hostedZone.Status.Id
+
+	// No id set, nothing we can do
+	if id == "" {
+		return ctx.Done()
+	}
+
+	hz, err := r.AWS.GetRoute53HostedZoneById(ctx.Context, id)
+	if err != nil {
+		var nshz *types.NoSuchHostedZone
+		if errors.As(err, &nshz) {
+			ctx.Log.Info("AWS Route53 HostedZone not found", "id", id)
+			return ctx.Done()
+		} else {
+			ctx.Log.Error(err, "failed to fetch AWS Route53 HostedZone", "id", id)
+			return ctx.Error(err)
+		}
+	}
+
+	// HostedZone NS recordset in connected zone
+	if hostedZone.Spec.ConnectWith != nil {
+		phz, err := r.AWS.FindOneRoute53HostedZoneByName(ctx.Context, hostedZone.Spec.ConnectWith.Name)
+		if err != nil {
+			ctx.Log.Error(err, "failed to fetch AWS Route53 HostedZone", "name", hostedZone.Spec.ConnectWith.Name)
+			return ctx.Error(err)
+		}
+		if phz == nil {
+			ctx.Log.V(1).Info("no matching AWS Route53 HostedZone found, unable to delete NS record connection, skipping", "name", hostedZone.Spec.ConnectWith.Name)
+		} else {
+			phzns, err := r.getHostedZoneNsRecordSet(ctx, *phz.Id, *hz.Name)
+			if err != nil {
+				ctx.Log.Error(err, "failed to fetch NS recordset for AWS Route53 HostedZone", "name", *phz.Name, "id", *phz.Id, "record-name", *hz.Name)
+				return ctx.Error(err)
+			}
+			if phzns == nil {
+				ctx.Log.V(1).Info("no matching NS recordset found, unable to delete NS record connection, skipping", "name", *phz.Name, "id", *phz.Id, "record-name", *hz.Name)
+			} else {
+				// Delete NS recordset
+				ctx.Log.Info("deleting NS record for AWS Route53 HostedZone", "id", *phz.Id, "recordset", *phzns)
+				err = r.AWS.DeleteRoute53ResourceRecordSet(ctx.Context, *phz.Id, *phzns, "deleting NS record for AWS Route53 HostedZone")
+				if err != nil {
+					var cbe *types.InvalidChangeBatch
+					if errors.As(err, &cbe) {
+						if strings.Contains(cbe.ErrorMessage(), "not found") {
+							ctx.Log.Info("ignoring change batch error", "error-message", cbe.ErrorMessage())
+						} else {
+							return ctx.Error(err)
+						}
+					} else {
+						return ctx.Error(err)
+					}
+				}
+			}
+		}
+	}
+
+	// HostedZone
+	ctx.Log.Info("deleting AWS Route53 HostedZone", "id", id)
+	_, err = r.AWS.Route53.DeleteHostedZone(ctx.Context, &route53.DeleteHostedZoneInput{
+		Id: aws.String(id),
+	})
+	if err != nil {
+		ctx.Log.Error(err, "failed to delete AWS Route53 HostedZone", "id", id)
+		return ctx.Error(err)
+	}
+
+	return ctx.Done()
 }
 
 func (r *HostedZoneReconciler) reconcileStatus(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone, hz *types.HostedZone, phz *types.HostedZone, phzns *types.ResourceRecordSet) reconcile.Result {
