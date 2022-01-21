@@ -19,6 +19,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,8 +29,13 @@ import (
 
 	"github.com/PaesslerAG/jsonpath"
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/convert"
 	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
+)
+
+const (
+	FinalizerName = "resourceset.core.aeto.net/finalizer"
 )
 
 // ResourceSetReconciler reconciles a ResourceSet object
@@ -56,7 +62,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	rctx := reconcile.NewContext("resourceset", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
-	resourceSet, err := r.getResourceSet(rctx, req.Namespace, req.Name)
+	resourceSet, err := r.getResourceSet(rctx, req)
 	if err != nil {
 		rctx.Log.Info("ResourceSet not found")
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
@@ -65,6 +71,16 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	rctx.Log.V(1).Info("found ResourceSet")
+
+	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
+		resourceSet := resourceSet
+		return r.reconcileDelete(c, resourceSet)
+	})
+	res, err := reconcile.WithFinalizer(r.Client, rctx, &resourceSet, finalizer)
+	if res != nil || err != nil {
+		rctx.Log.V(1).Info("returning finalizer results for ResourceSet", "resource-set", resourceSet.NamespacedName(), "res", res, "error", err)
+		return *res, err
+	}
 
 	results := make([]reconcile.Result, 0)
 
@@ -78,18 +94,15 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return rctx.Complete(results...)
 }
 
-func (r *ResourceSetReconciler) getResourceSet(ctx reconcile.Context, namespace string, name string) (*corev1alpha1.ResourceSet, error) {
+func (r *ResourceSetReconciler) getResourceSet(ctx reconcile.Context, req ctrl.Request) (corev1alpha1.ResourceSet, error) {
 	var rs corev1alpha1.ResourceSet
-	if err := r.Get(ctx.Context, client.ObjectKey{
-		Name:      name,
-		Namespace: namespace,
-	}, &rs); err != nil {
-		return nil, err
+	if err := r.Get(ctx.Context, req.NamespacedName, &rs); err != nil {
+		return corev1alpha1.ResourceSet{}, err
 	}
-	return &rs, nil
+	return rs, nil
 }
 
-func (r *ResourceSetReconciler) applyResource(ctx reconcile.Context, resourceSet *corev1alpha1.ResourceSet, group corev1alpha1.ResourceSetResourceGroup, resource corev1alpha1.EmbeddedResource) reconcile.Result {
+func (r *ResourceSetReconciler) applyResource(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, group corev1alpha1.ResourceSetResourceGroup, resource corev1alpha1.EmbeddedResource) reconcile.Result {
 	b, err := json.Marshal(resource)
 	if err != nil {
 		return ctx.Error(err)
@@ -121,9 +134,73 @@ func (r *ResourceSetReconciler) applyResource(ctx reconcile.Context, resourceSet
 	return ctx.Done()
 }
 
+func (r *ResourceSetReconciler) reconcileDelete(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet) reconcile.Result {
+	results := reconcile.ResultList{}
+
+	for _, group := range reverseResourceGroupList(resourceSet.Spec.Groups) {
+		for _, resource := range reverseEmbeddedResourceList(group.Resources) {
+			ctx.Log.V(1).Info("deleting resource belonging to ResourceSet", "group", group.Name, "template", group.SourceTemplate, "resource", resource)
+
+			unstructuredList, err := convert.YamlToUnstructuredSlice(string(resource.Raw))
+			if err != nil {
+				results = append(results, ctx.Error(err))
+				continue
+			}
+
+			if len(unstructuredList) != 1 {
+				results = append(results, ctx.Error(fmt.Errorf("expected exactly 1 unstructured resource, got %d", len(unstructuredList))))
+				continue
+			}
+
+			unstructured := unstructuredList[0]
+			if err := r.Dynamic.Delete(ctx, types.NamespacedName{
+				Name:      unstructured.GetName(),
+				Namespace: unstructured.GetNamespace(),
+			}, unstructured.GroupVersionKind()); err != nil {
+				results = append(results, ctx.Error(err))
+				continue
+			}
+
+			results = append(results, ctx.Done())
+		}
+	}
+
+	if results.Success() {
+		ctx.Log.V(1).Info("all resources belonging to ResourceSet deleted")
+		return ctx.Done()
+	}
+
+	ctx.Log.Info("failed to delete one ore more resources belonging to ResourceSet, requeue")
+	return ctx.RequeueIn(15)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ResourceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.ResourceSet{}).
 		Complete(r)
+}
+
+func reverseResourceGroupList(s []corev1alpha1.ResourceSetResourceGroup) []corev1alpha1.ResourceSetResourceGroup {
+	a := make([]corev1alpha1.ResourceSetResourceGroup, len(s))
+	copy(a, s)
+
+	for i := len(a)/2 - 1; i >= 0; i-- {
+		opp := len(a) - 1 - i
+		a[i], a[opp] = a[opp], a[i]
+	}
+
+	return a
+}
+
+func reverseEmbeddedResourceList(s []corev1alpha1.EmbeddedResource) []corev1alpha1.EmbeddedResource {
+	a := make([]corev1alpha1.EmbeddedResource, len(s))
+	copy(a, s)
+
+	for i := len(a)/2 - 1; i >= 0; i-- {
+		opp := len(a) - 1 - i
+		a[i], a[opp] = a[opp], a[i]
+	}
+
+	return a
 }

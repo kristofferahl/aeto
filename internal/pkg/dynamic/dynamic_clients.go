@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -61,7 +62,43 @@ func (c *Clients) Apply(ctx reconcile.Context, namespacedName types.NamespacedNa
 		return err
 	}
 
-	ctx.Log.V(1).Info("applied resource", "resource", namespacedName.String(), "gvk", obj.GroupVersionKind().String())
+	ctx.Log.V(1).Info("resource applied", "resource", namespacedName.String(), "gvk", obj.GroupVersionKind().String())
+	return nil
+}
+
+// Delete removes an unstructured object given a namespaced name and group, version, kind
+func (c *Clients) Delete(ctx reconcile.Context, namespacedName types.NamespacedName, gvk schema.GroupVersionKind) error {
+	ctx.Log.V(1).Info("deleting resource", "resource", namespacedName.String(), "gvk", gvk.String())
+
+	// Find REST mapping
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(c.DiscoveryClient))
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		ctx.Log.Error(err, "failed to delete resource, REST mapping error", "resource", namespacedName.String(), "gvk", gvk.String())
+		return err
+	}
+
+	// Delete resource
+	var dri dynamic.ResourceInterface
+
+	if namespacedName.Namespace == "" {
+		dri = c.DynamicClient.Resource(mapping.Resource)
+	} else {
+		dri = c.DynamicClient.Resource(mapping.Resource).Namespace(namespacedName.Namespace)
+	}
+
+	err = dri.Delete(ctx.Context, namespacedName.Name, metav1.DeleteOptions{})
+	if err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			ctx.Log.Info("resource not found", "resource", namespacedName.String(), "gvk", gvk.String())
+			return nil
+		}
+
+		ctx.Log.Error(err, "failed to delete resource", "resource", namespacedName.String(), "gvk", gvk.String())
+		return err
+	}
+
+	ctx.Log.V(1).Info("resource deleted", "resource", namespacedName.String(), "gvk", gvk.String())
 	return nil
 }
 
@@ -73,6 +110,7 @@ func (c *Clients) Get(ctx reconcile.Context, namespacedName types.NamespacedName
 	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(c.DiscoveryClient))
 	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
+		ctx.Log.Error(err, "failed to fetch resource, REST mapping error", "resource", namespacedName.String(), "gvk", gvk.String())
 		return nil, err
 	}
 
@@ -80,9 +118,10 @@ func (c *Clients) Get(ctx reconcile.Context, namespacedName types.NamespacedName
 	dri := c.DynamicClient.Resource(mapping.Resource).Namespace(namespacedName.Namespace)
 	resource, err := dri.Get(ctx.Context, namespacedName.Name, metav1.GetOptions{})
 	if err != nil {
+		ctx.Log.Error(err, "failed to fetch resource", "resource", namespacedName.String(), "gvk", gvk.String())
 		return nil, err
 	}
-	ctx.Log.V(1).Info("fetched resource", "resource", namespacedName.String(), "gvk", gvk.String())
 
+	ctx.Log.V(1).Info("resource fetched", "resource", namespacedName.String(), "gvk", gvk.String())
 	return resource, nil
 }

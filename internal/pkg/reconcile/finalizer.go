@@ -30,7 +30,7 @@ func WithFinalizer(client client.Client, ctx Context, obj client.Object, finaliz
 	} else {
 		// The object is being deleted
 		if util.SliceContainsString(obj.GetFinalizers(), finalizer.Name()) {
-			ctx.Log.V(1).Info(fmt.Sprintf("%s is being deleted, finalizer is present", objTypeName), "finalizer", finalizer.Name())
+			ctx.Log.Info(fmt.Sprintf("%s is being deleted, finalizer is present", objTypeName), "finalizer", finalizer.Name())
 
 			result := finalizer.Handler()(ctx)
 			if result.IsError() {
@@ -44,7 +44,7 @@ func WithFinalizer(client client.Client, ctx Context, obj client.Object, finaliz
 			if err := client.Update(ctx.Context, obj); err != nil {
 				return &ctrl.Result{}, err
 			}
-			ctx.Log.V(1).Info(fmt.Sprintf("removed finalizer for %s", objTypeName), "finalizer", finalizer.Name())
+			ctx.Log.Info(fmt.Sprintf("finalizer removed for %s", objTypeName), "finalizer", finalizer.Name())
 		}
 
 		return &ctrl.Result{}, nil
