@@ -88,7 +88,7 @@ func main() {
 
 	// Operator flags
 	flag.StringVar(&operatorNamespace, "operator-namespace", "aeto", "The operator namespace.")
-	flag.DurationVar(&operatorReconcileInterval, "operator-reconcile-interval", 1*time.Minute, "The interval of the reconciliation loop")
+	flag.DurationVar(&operatorReconcileInterval, "operator-reconcile-interval", 60*time.Minute, "The interval of the reconciliation loop")
 
 	// Parse flags
 	flag.Parse()
