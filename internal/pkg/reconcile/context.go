@@ -45,7 +45,7 @@ func (ctx Context) RequeueIn(seconds int) Result {
 // Error creates a ReconcileResult that will trigger a requeue based on the given error
 func (ctx Context) Error(err error) Result {
 	return Result{
-		Error: err,
+		err: err,
 	}
 }
 

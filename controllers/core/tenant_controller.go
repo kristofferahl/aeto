@@ -97,7 +97,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	resourceSet, errs := r.newResourceSet(rctx, tenant, blueprint)
 	if len(resourceSet.Spec.Groups) > 0 {
 		rs, result := r.applyResourceSet(rctx, resourceSet)
-		if result.Error == nil {
+		if !result.Error() {
 			resourceSet = *rs
 		}
 		results = append(results, result)

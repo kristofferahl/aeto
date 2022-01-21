@@ -40,7 +40,7 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 	}
 
 	ingresses, ingressRes := c.GetIngressList(ctx)
-	if ingressRes.IsError() {
+	if ingressRes.Error() {
 		return false, ingressRes
 	}
 
