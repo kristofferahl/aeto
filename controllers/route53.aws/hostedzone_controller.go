@@ -19,7 +19,9 @@ package route53aws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -114,10 +116,15 @@ func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hosted
 
 	// No id set, try and create it
 	if id == "" {
-		ctx.Log.Info("creating a new AWS Route53 HostedZone", "name", hostedZone.Spec.Name)
-		hz, err := r.newHostedZone(ctx, hostedZone.Spec.Name)
+		now := time.Now().UTC()
+		callerReference := fmt.Sprintf("%s/%s/%s/%s", ctx.Request.String(), hostedZone.Spec.Name, hostedZone.CreationTimestamp.UTC().Format(time.RFC3339), fmt.Sprintf("%02d:%02d", now.Hour(), now.Minute()))
+		if len(callerReference) > 128 {
+			callerReference = callerReference[:128]
+		}
+		ctx.Log.Info("creating a new AWS Route53 HostedZone", "name", hostedZone.Spec.Name, "caller-reference", callerReference)
+		hz, err := r.newHostedZone(ctx, hostedZone.Spec.Name, callerReference)
 		if err != nil {
-			ctx.Log.Error(err, "failed to create AWS Route53 HostedZone", "name", hostedZone.Spec.Name)
+			ctx.Log.Error(err, "failed to create AWS Route53 HostedZone", "name", hostedZone.Spec.Name, "caller-reference", callerReference)
 			return nil, nil, ctx.Error(err)
 		}
 		id = *hz.Id
@@ -261,8 +268,14 @@ func (r *HostedZoneReconciler) reconcileDelete(ctx reconcile.Context, hostedZone
 		Id: aws.String(id),
 	})
 	if err != nil {
-		ctx.Log.Error(err, "failed to delete AWS Route53 HostedZone", "id", id)
-		return ctx.Error(err)
+		var hzne *types.HostedZoneNotEmpty
+		if errors.As(err, &hzne) {
+			ctx.Log.Info("AWS Route53 HostedZone contains non-required resource record sets and cannot be deleted, retrying", "id", id)
+			return ctx.RequeueIn(30) // NOTE: Should we requeue with error instead to to utilize backoff strategy?
+		} else {
+			ctx.Log.Error(err, "failed to delete AWS Route53 HostedZone", "id", id)
+			return ctx.Error(err)
+		}
 	}
 
 	return ctx.Done()
@@ -299,11 +312,10 @@ func (r *HostedZoneReconciler) reconcileStatus(ctx reconcile.Context, hostedZone
 	return ctx.Done()
 }
 
-func (r *HostedZoneReconciler) newHostedZone(ctx reconcile.Context, name string) (types.HostedZone, error) {
-	id := ctx.CorrelationId
+func (r *HostedZoneReconciler) newHostedZone(ctx reconcile.Context, name string, callerReference string) (types.HostedZone, error) {
 	zone, err := r.AWS.Route53.CreateHostedZone(ctx.Context, &route53.CreateHostedZoneInput{
 		Name:            aws.String(name),
-		CallerReference: aws.String(id),
+		CallerReference: aws.String(callerReference),
 		HostedZoneConfig: &types.HostedZoneConfig{
 			Comment:     aws.String("Managed by aeto"),
 			PrivateZone: false,

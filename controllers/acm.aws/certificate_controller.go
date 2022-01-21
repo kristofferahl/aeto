@@ -269,6 +269,7 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 	_, err = r.AWS.Acm.DeleteCertificate(ctx.Context, &acm.DeleteCertificateInput{
 		CertificateArn: aws.String(ca),
 	})
+	// TODO: Handle error for Certificate InUse or simply requeue
 	if err != nil {
 		ctx.Log.Error(err, "failed to delete AWS ACM Certificate", "arn", ca)
 		return ctx.Error(err)

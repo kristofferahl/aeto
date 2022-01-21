@@ -87,10 +87,13 @@ func (c *Clients) Delete(ctx reconcile.Context, namespacedName types.NamespacedN
 		dri = c.DynamicClient.Resource(mapping.Resource).Namespace(namespacedName.Namespace)
 	}
 
-	err = dri.Delete(ctx.Context, namespacedName.Name, metav1.DeleteOptions{})
+	deletePolicy := metav1.DeletePropagationBackground
+	err = dri.Delete(ctx.Context, namespacedName.Name, metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	})
 	if err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			ctx.Log.Info("resource not found", "resource", namespacedName.String(), "gvk", gvk.String())
+			ctx.Log.V(1).Info("resource not found", "resource", namespacedName.String(), "gvk", gvk.String())
 			return nil
 		}
 
@@ -98,7 +101,7 @@ func (c *Clients) Delete(ctx reconcile.Context, namespacedName types.NamespacedN
 		return err
 	}
 
-	ctx.Log.V(1).Info("resource deleted", "resource", namespacedName.String(), "gvk", gvk.String())
+	ctx.Log.V(1).Info("resource delete triggered", "resource", namespacedName.String(), "gvk", gvk.String())
 	return nil
 }
 
@@ -118,6 +121,11 @@ func (c *Clients) Get(ctx reconcile.Context, namespacedName types.NamespacedName
 	dri := c.DynamicClient.Resource(mapping.Resource).Namespace(namespacedName.Namespace)
 	resource, err := dri.Get(ctx.Context, namespacedName.Name, metav1.GetOptions{})
 	if err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			ctx.Log.V(1).Info("resource not found", "resource", namespacedName.String(), "gvk", gvk.String())
+			return nil, nil
+		}
+
 		ctx.Log.Error(err, "failed to fetch resource", "resource", namespacedName.String(), "gvk", gvk.String())
 		return nil, err
 	}

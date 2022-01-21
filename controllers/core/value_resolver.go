@@ -83,6 +83,10 @@ func resolveFromResource(r ValueResolver, vr corev1alpha1.ValueRef) (string, err
 		return "", fmt.Errorf("invalid value refrence, error fetching resource \"%s\" %s: %v", resourceRef.String(), resourceGvk.String(), err)
 	}
 
+	if resource == nil {
+		return "", fmt.Errorf("invalid value refrence, resource \"%s\" %s not found", resourceRef.String(), resourceGvk.String())
+	}
+
 	bytes, _ := resource.MarshalJSON()
 	v := interface{}(nil)
 	json.Unmarshal(bytes, &v)

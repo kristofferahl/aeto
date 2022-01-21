@@ -153,11 +153,25 @@ func (r *ResourceSetReconciler) reconcileDelete(ctx reconcile.Context, resourceS
 			}
 
 			unstructured := unstructuredList[0]
-			if err := r.Dynamic.Delete(ctx, types.NamespacedName{
+			nn := types.NamespacedName{
 				Name:      unstructured.GetName(),
 				Namespace: unstructured.GetNamespace(),
-			}, unstructured.GroupVersionKind()); err != nil {
+			}
+
+			if err := r.Dynamic.Delete(ctx, nn, unstructured.GroupVersionKind()); err != nil {
 				results = append(results, ctx.Error(err))
+				continue
+			}
+
+			unstructured, err = r.Dynamic.Get(ctx, nn, unstructured.GroupVersionKind())
+			if err != nil {
+				results = append(results, ctx.Error(err))
+				continue
+			}
+
+			if unstructured != nil {
+				ctx.Log.V(1).Info("resource is still being terminated, requeue", "resource", nn, "gvk", unstructured.GroupVersionKind())
+				results = append(results, ctx.RequeueIn(5))
 				continue
 			}
 
@@ -165,13 +179,15 @@ func (r *ResourceSetReconciler) reconcileDelete(ctx reconcile.Context, resourceS
 		}
 	}
 
-	if results.Success() {
-		ctx.Log.V(1).Info("all resources belonging to ResourceSet deleted")
-		return ctx.Done()
+	for _, res := range results {
+		if res.Requeue() {
+			ctx.Log.Info("one ore more resources belonging to ResourceSet are still being terminated, requeue")
+			return res
+		}
 	}
 
-	ctx.Log.Info("failed to delete one ore more resources belonging to ResourceSet, requeue")
-	return ctx.RequeueIn(15)
+	ctx.Log.V(1).Info("all resources belonging to ResourceSet deleted")
+	return ctx.Done()
 }
 
 // SetupWithManager sets up the controller with the Manager.
