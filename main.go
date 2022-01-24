@@ -134,6 +134,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if awsRegion := config.StringEnvVar("AWS_REGION", ""); awsRegion == "" {
+		setupLog.Error(fmt.Errorf("required environment variable AWS_REGION has no value set"), "bootstrap failed")
+		os.Exit(1)
+	}
+
 	awsConfig, err := awsconfig.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		setupLog.Error(err, "unable to load AWS credentials")
@@ -141,6 +146,7 @@ func main() {
 	}
 
 	awsClients := aws.Clients{
+		Log:     ctrl.Log.WithName("aws-client"),
 		Acm:     acm.NewFromConfig(awsConfig),
 		Route53: route53.NewFromConfig(awsConfig),
 	}

@@ -71,6 +71,11 @@ spec:
                 required:
                 - name
                 type: object
+              deletionPolicy:
+                default: default
+                description: DeletionPolicy defines the strategy to use when a hosted
+                  zone is deleted
+                type: string
               name:
                 description: Name is the desired name for the AWS Route53 HostedZone.
                 type: string

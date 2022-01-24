@@ -145,7 +145,6 @@ func (r *CertificateConnectorReconciler) SetupWithManager(mgr ctrl.Manager) erro
 func (r *CertificateConnectorReconciler) findObjectsForConfigMap(certificate client.Object) []kreconcile.Request {
 	certificateConnectorList := &acmawsv1alpha1.CertificateConnectorList{}
 	listOps := &client.ListOptions{
-		//FieldSelector: fields.OneTermEqualSelector(configMapField, certificate.GetName()),
 		Namespace: "default",
 	}
 	err := r.List(context.TODO(), certificateConnectorList, listOps)

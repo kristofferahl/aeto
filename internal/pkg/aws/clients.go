@@ -4,19 +4,24 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/go-logr/logr"
 )
 
 // Clients wrapper for AWS
 type Clients struct {
+	Log     logr.Logger
 	Acm     *acm.Client
 	Route53 *route53.Client
 }
+
+var unescaper = strings.NewReplacer(`\057`, "/", `\052`, "*")
 
 // FindOneAcmCertificateByDomainName returns the first matching ACM Certificate by domain name
 func (c Clients) FindOneAcmCertificateByDomainName(ctx context.Context, domainName string) (*acmtypes.CertificateSummary, error) {
@@ -168,6 +173,56 @@ func (c Clients) GetRoute53HostedZoneById(ctx context.Context, id string) (route
 	return *res.HostedZone, nil
 }
 
+// DeleteRoute53HostedZone deletes a Route53 HostedZone by ID
+func (c Clients) DeleteRoute53HostedZone(ctx context.Context, hostedZone route53types.HostedZone, force bool) error {
+	if force {
+		c.Log.V(1).Info("purging AWS Route53 HostedZone before deletion", "hosted-zone", hostedZone.Id)
+
+		recordSetList, err := c.ListRoute53ResourceRecordSets(ctx, *hostedZone.Id)
+		if err != nil {
+			return err
+		}
+
+		changes := make([]route53types.Change, 0)
+		for _, rs := range recordSetList {
+			rs := rs
+			if !isRoute53HostedZoneDefaultRecord(hostedZone, rs) {
+				change := route53types.Change{
+					Action:            route53types.ChangeActionDelete,
+					ResourceRecordSet: &rs,
+				}
+				changes = append(changes, change)
+			}
+		}
+
+		if len(changes) > 0 {
+			params := route53.ChangeResourceRecordSetsInput{
+				HostedZoneId: hostedZone.Id,
+				ChangeBatch: &route53types.ChangeBatch{
+					Changes: changes,
+					Comment: aws.String("purging AWS Route53 HostedZone, cleaning up all resource record sets"),
+				},
+			}
+			res, err := c.Route53.ChangeResourceRecordSets(ctx, &params)
+			if err != nil {
+				return err
+			}
+			c.WaitForRoute53Change(ctx, res.ChangeInfo)
+			c.Log.Info(fmt.Sprintf("deleted %d resource record sets from AWS Route53 HostedZone", len(changes)), "hosted-zone", hostedZone.Id)
+		}
+	}
+
+	res, err := c.Route53.DeleteHostedZone(ctx, &route53.DeleteHostedZoneInput{
+		Id: hostedZone.Id,
+	})
+	if err != nil {
+		return err
+	}
+	c.WaitForRoute53Change(ctx, res.ChangeInfo)
+
+	return nil
+}
+
 // ListRoute53HostedZones returns all Route53 HostedZones
 func (c Clients) ListRoute53HostedZones(ctx context.Context) ([]route53types.HostedZone, error) {
 	items := make([]route53types.HostedZone, 0)
@@ -179,6 +234,39 @@ func (c Clients) ListRoute53HostedZones(ctx context.Context) ([]route53types.Hos
 			return nil, err
 		}
 		items = append(items, output.HostedZones...)
+	}
+
+	return items, nil
+}
+
+// ListRoute53ResourceRecordSets returns all Route53 record sets for a HostedZone
+func (c Clients) ListRoute53ResourceRecordSets(ctx context.Context, hostedZoneID string) ([]route53types.ResourceRecordSet, error) {
+	items := make([]route53types.ResourceRecordSet, 0)
+
+	req := route53.ListResourceRecordSetsInput{
+		HostedZoneId: aws.String(hostedZoneID),
+	}
+
+	for {
+		var resp *route53.ListResourceRecordSetsOutput
+		resp, err := c.Route53.ListResourceRecordSets(ctx, &req)
+		if err != nil {
+			return items, err
+		} else {
+			items = append(items, resp.ResourceRecordSets...)
+			if resp.IsTruncated {
+				req.StartRecordName = resp.NextRecordName
+				req.StartRecordType = resp.NextRecordType
+				req.StartRecordIdentifier = resp.NextRecordIdentifier
+			} else {
+				break
+			}
+		}
+	}
+
+	// unescape wildcards
+	for _, rrset := range items {
+		rrset.Name = aws.String(unescaper.Replace(*rrset.Name))
 	}
 
 	return items, nil
@@ -251,7 +339,6 @@ func (c Clients) DeleteRoute53ResourceRecordSet(ctx context.Context, hostedZoneI
 	return c.route53ResourceRecordSetAction(ctx, route53types.ChangeActionDelete, hostedZoneId, recordSet, description)
 }
 
-// DeleteRoute53ResourceRecordSet deletes a resource recordset in the specified hosted zone
 func (c Clients) route53ResourceRecordSetAction(ctx context.Context, action route53types.ChangeAction, hostedZoneId string, recordSet route53types.ResourceRecordSet, description string) error {
 	params := route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &route53types.ChangeBatch{
@@ -268,4 +355,29 @@ func (c Clients) route53ResourceRecordSetAction(ctx context.Context, action rout
 
 	_, err := c.Route53.ChangeResourceRecordSets(ctx, &params)
 	return err
+}
+
+func (c Clients) WaitForRoute53Change(ctx context.Context, change *route53types.ChangeInfo) {
+	c.Log.V(1).Info("waiting for AWS Route53 change to complete", "id", change.Id)
+	for {
+		req := route53.GetChangeInput{Id: change.Id}
+		resp, err := c.Route53.GetChange(ctx, &req)
+		if err != nil {
+			c.Log.V(1).Error(err, "waiting for AWS Route53 change failed", "id", change.Id)
+		}
+		if resp.ChangeInfo.Status == route53types.ChangeStatusInsync {
+			c.Log.V(1).Info("AWS Route53 change completed", "id", change.Id)
+			break
+		} else if resp.ChangeInfo.Status == route53types.ChangeStatusPending {
+			c.Log.V(2).Info("still wating for AWS Route53 change to complete", "id", change.Id)
+		} else {
+			c.Log.V(1).Info("AWS Route53 change failed", "id", change.Id, "status", resp.ChangeInfo.Status)
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func isRoute53HostedZoneDefaultRecord(hostedZone route53types.HostedZone, recordSet route53types.ResourceRecordSet) bool {
+	return (recordSet.Type == route53types.RRTypeNs || recordSet.Type == route53types.RRTypeSoa) && *recordSet.Name == *hostedZone.Name
 }

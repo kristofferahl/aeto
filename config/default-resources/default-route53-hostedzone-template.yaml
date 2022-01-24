@@ -21,3 +21,4 @@ spec:
         connectWith:
           name: '{{ .String "ParentHostedZoneName" }}'
           ttl: 300
+        deletionPolicy: force

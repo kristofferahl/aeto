@@ -263,15 +263,13 @@ func (r *HostedZoneReconciler) reconcileDelete(ctx reconcile.Context, hostedZone
 	}
 
 	// HostedZone
-	ctx.Log.Info("deleting AWS Route53 HostedZone", "id", id)
-	_, err = r.AWS.Route53.DeleteHostedZone(ctx.Context, &route53.DeleteHostedZoneInput{
-		Id: aws.String(id),
-	})
+	ctx.Log.Info("deleting AWS Route53 HostedZone", "id", *hz.Id, "deletion-policy", hostedZone.Spec.DeletionPolicy)
+	err = r.AWS.DeleteRoute53HostedZone(ctx.Context, hz, hostedZone.Spec.DeletionPolicy == route53awsv1alpha1.HostedZoneDeletionPolicyForce)
 	if err != nil {
 		var hzne *types.HostedZoneNotEmpty
 		if errors.As(err, &hzne) {
 			ctx.Log.Info("AWS Route53 HostedZone contains non-required resource record sets and cannot be deleted, retrying", "id", id)
-			return ctx.RequeueIn(30) // NOTE: Should we requeue with error instead to to utilize backoff strategy?
+			return ctx.RequeueIn(60) // NOTE: Should we requeue with error instead to to utilize backoff strategy?
 		} else {
 			ctx.Log.Error(err, "failed to delete AWS Route53 HostedZone", "id", id)
 			return ctx.Error(err)
@@ -329,21 +327,19 @@ func (r *HostedZoneReconciler) newHostedZone(ctx reconcile.Context, name string,
 }
 
 func (r *HostedZoneReconciler) getHostedZoneNsRecordSet(ctx reconcile.Context, hostedZoneID string, recordName string) (*types.ResourceRecordSet, error) {
-	res, err := r.AWS.Route53.ListResourceRecordSets(ctx.Context, &route53.ListResourceRecordSetsInput{
-		HostedZoneId: aws.String(hostedZoneID),
-	})
+	res, err := r.AWS.ListRoute53ResourceRecordSets(ctx.Context, hostedZoneID)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, rs := range res.ResourceRecordSets {
+	for _, rs := range res {
 		match := rs.Type == types.RRTypeNs && *rs.Name == recordName
 		if match {
 			return &rs, nil
 		}
 	}
 
-	ctx.Log.V(1).Info("NS recordset not found", "name", recordName, "truncated", res.IsTruncated)
+	ctx.Log.V(1).Info("NS recordset not found", "name", recordName)
 	return nil, nil
 }
 

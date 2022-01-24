@@ -24,6 +24,13 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	HostedZoneDeletionPolicyDefault HostedZoneDeletionPolicy = "default"
+	HostedZoneDeletionPolicyForce   HostedZoneDeletionPolicy = "force"
+)
+
+type HostedZoneDeletionPolicy string
+
 // HostedZoneSpec defines the desired state of HostedZone
 type HostedZoneSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -40,6 +47,11 @@ type HostedZoneSpec struct {
 	// ConnectWith tells the operator to connect the HostedZone with a parent hosted zone by upserting it's NS recordset.
 	// +kubebuilder:validation:Optional
 	ConnectWith *HostedZoneConnection `json:"connectWith,omitempty"`
+
+	// DeletionPolicy defines the strategy to use when a hosted zone is deleted
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=default
+	DeletionPolicy HostedZoneDeletionPolicy `json:"deletionPolicy"`
 }
 
 // HostedZoneConnection defines the connection details for the HostedZone
