@@ -39,6 +39,10 @@ import (
 	templating "github.com/kristofferahl/aeto/internal/pkg/template"
 )
 
+const (
+	TenantFinalizerName = "tenant.core.aeto.net/finalizer"
+)
+
 var (
 	namespaceGVK = schema.GroupVersionKind{
 		Group:   "",
@@ -82,6 +86,23 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	rctx.Log.V(1).Info("found Tenant")
 
+	finalizer := reconcile.NewGenericFinalizer(TenantFinalizerName, func(c reconcile.Context) reconcile.Result {
+		tenant := tenant
+		if tenant.Status.Phase != corev1alpha1.TenantTerminating {
+			res := r.updateStatus(c, tenant, nil, nil, corev1alpha1.TenantTerminating)
+			if res.Error() {
+				return res
+			}
+			return c.RequeueIn(5)
+		}
+		return r.reconcileDelete(c, tenant)
+	})
+	res, err := reconcile.WithFinalizer(r.Client, rctx, &tenant, finalizer)
+	if res != nil || err != nil {
+		rctx.Log.V(1).Info("returning finalizer results for Tenant", "tenant", tenant.NamespacedName(), "res", res, "error", err)
+		return *res, err
+	}
+
 	blueprintRef := types.NamespacedName{
 		Namespace: config.Operator.Namespace,
 		Name:      tenant.Blueprint(),
@@ -92,9 +113,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	results := make([]reconcile.Result, 0)
+	results := reconcile.ResultList{}
 
-	resourceSet, errs := r.newResourceSet(rctx, tenant, blueprint)
+	resourceSet, generateErrs := r.newResourceSet(rctx, tenant, blueprint)
 	if len(resourceSet.Spec.Groups) > 0 {
 		rs, result := r.applyResourceSet(rctx, resourceSet)
 		if !result.Error() {
@@ -103,15 +124,15 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		results = append(results, result)
 	}
 
-	if len(errs) > 0 {
-		for _, err = range errs {
+	if len(generateErrs) > 0 {
+		for _, err = range generateErrs {
 			r.Recorder.Event(&tenant, "Warning", "ResourceSet", fmt.Sprintf("Failed to generate resource set for tenant; %s", err.Error()))
 		}
 		results = append(results, rctx.RequeueIn(15))
 	}
 
 	// Handle update of status
-	results = append(results, r.updateStatus(rctx, tenant, blueprint, resourceSet))
+	results = append(results, r.updateStatus(rctx, tenant, &blueprint, &resourceSet, corev1alpha1.TenantReconciling))
 
 	return rctx.Complete(results...)
 }
@@ -372,9 +393,46 @@ func (r *TenantReconciler) applyResourceSet(ctx reconcile.Context, resourceSet c
 	return existing, ctx.Done()
 }
 
-func (r *TenantReconciler) updateStatus(ctx reconcile.Context, tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint, resourceSet corev1alpha1.ResourceSet) reconcile.Result {
-	tenant.Status.Blueprint = blueprint.NamespacedName().String() + " v" + blueprint.ResourceVersion
-	tenant.Status.ResourceSet = resourceSet.NamespacedName().String() + " v" + resourceSet.ResourceVersion
+func (r *TenantReconciler) reconcileDelete(ctx reconcile.Context, tenant corev1alpha1.Tenant) reconcile.Result {
+	nn := types.NamespacedName{
+		Name:      tenant.Name,
+		Namespace: config.Operator.Namespace,
+	}
+	resourceSet, err := r.getResourceSet(ctx, nn)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			ctx.Log.Error(err, "failed to fetch resource set", "resource-set", nn.String())
+			return ctx.Error(err)
+		}
+	}
+
+	if resourceSet != nil {
+		ctx.Log.V(1).Info("deleting resource set", "resource-set", resourceSet.NamespacedName())
+		err = r.Delete(ctx.Context, resourceSet, &client.DeleteOptions{})
+		if err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				ctx.Log.Error(err, "failed to delete", "resource-set", resourceSet.NamespacedName())
+				return ctx.Error(err)
+			}
+			ctx.Log.V(1).Info("resource set deleted", "resource-set", resourceSet.NamespacedName())
+		}
+		return ctx.RequeueIn(5)
+	}
+
+	ctx.Log.V(1).Info("all resources belonging to Tenant deleted")
+	return ctx.Done()
+}
+
+func (r *TenantReconciler) updateStatus(ctx reconcile.Context, tenant corev1alpha1.Tenant, blueprint *corev1alpha1.Blueprint, resourceSet *corev1alpha1.ResourceSet, phase corev1alpha1.TenantPhase) reconcile.Result {
+	tenant.Status.Phase = phase
+
+	if blueprint != nil {
+		tenant.Status.Blueprint = blueprint.NamespacedName().String() + " v" + blueprint.ResourceVersion
+	}
+
+	if resourceSet != nil {
+		tenant.Status.ResourceSet = resourceSet.NamespacedName().String() + " v" + resourceSet.ResourceVersion
+	}
 
 	ctx.Log.V(1).Info("updating Tenant status")
 	if err := r.Status().Update(ctx.Context, &tenant); err != nil {

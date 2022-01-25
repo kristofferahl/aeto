@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	FinalizerName = "resourceset.core.aeto.net/finalizer"
+	ResourceSetFinalizerName = "resourceset.core.aeto.net/finalizer"
 )
 
 // ResourceSetReconciler reconciles a ResourceSet object
@@ -75,7 +75,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	rctx.Log.V(1).Info("found ResourceSet")
 
-	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
+	finalizer := reconcile.NewGenericFinalizer(ResourceSetFinalizerName, func(c reconcile.Context) reconcile.Result {
 		resourceSet := resourceSet
 		if resourceSet.Status.Phase != corev1alpha1.ResourceSetTerminating {
 			res := r.updateStatus(c, resourceSet, corev1alpha1.ResourceSetTerminating)
