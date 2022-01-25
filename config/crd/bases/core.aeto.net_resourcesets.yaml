@@ -20,6 +20,14 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.observedGeneration
+      name: Generation
+      priority: 1
+      type: string
+    - jsonPath: .status.resourceVersion
+      name: ResourceVersion
+      priority: 1
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -73,9 +81,16 @@ spec:
           status:
             description: ResourceSetStatus defines the observed state of ResourceSet
             properties:
+              observedGeneration:
+                description: ObservedGeneration is the last reconciled generation.
+                format: int64
+                type: integer
               phase:
                 description: Phase is the current lifecycle phase of the resource
                   set.
+                type: string
+              resourceVersion:
+                description: ResourceVersion is the last reconciled resource version.
                 type: string
             type: object
         type: object

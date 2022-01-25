@@ -69,6 +69,12 @@ type ResourceSetStatus struct {
 
 	// Phase is the current lifecycle phase of the resource set.
 	Phase ResourceSetPhase `json:"phase,omitempty"`
+
+	// ObservedGeneration is the last reconciled generation.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// ResourceVersion is the last reconciled resource version.
+	ResourceVersion string `json:"resourceVersion,omitempty"`
 }
 
 type ResourceSetPhase string
@@ -76,6 +82,8 @@ type ResourceSetPhase string
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="Phase",priority=0,type=string,JSONPath=`.status.phase`
+//+kubebuilder:printcolumn:name="Generation",priority=1,type=string,JSONPath=`.status.observedGeneration`
+//+kubebuilder:printcolumn:name="ResourceVersion",priority=1,type=string,JSONPath=`.status.resourceVersion`
 
 // ResourceSet is the Schema for the resourcesets API
 type ResourceSet struct {

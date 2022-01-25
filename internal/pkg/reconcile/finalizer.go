@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/kristofferahl/aeto/internal/pkg/util"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,6 +45,7 @@ func WithFinalizer(client client.Client, ctx Context, obj client.Object, finaliz
 			if err := client.Update(ctx.Context, obj); err != nil {
 				return &ctrl.Result{}, err
 			}
+			time.Sleep(5 * time.Second) // NOTE: Sleeping to stop new reconcile where object still exists in cache
 			ctx.Log.Info(fmt.Sprintf("finalizer removed for %s", objTypeName), "finalizer", finalizer.Name())
 		}
 

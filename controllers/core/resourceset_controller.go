@@ -24,14 +24,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/PaesslerAG/jsonpath"
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/convert"
 	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
+	"github.com/kristofferahl/aeto/internal/pkg/util"
 )
 
 const (
@@ -74,7 +77,13 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
 		resourceSet := resourceSet
-		r.updateStatus(c, resourceSet, corev1alpha1.ResourceSetTerminating)
+		if resourceSet.Status.Phase != corev1alpha1.ResourceSetTerminating {
+			res := r.updateStatus(c, resourceSet, corev1alpha1.ResourceSetTerminating)
+			if res.Error() {
+				return res
+			}
+			return c.RequeueIn(5)
+		}
 		return r.reconcileDelete(c, resourceSet)
 	})
 	res, err := reconcile.WithFinalizer(r.Client, rctx, &resourceSet, finalizer)
@@ -194,12 +203,21 @@ func (r *ResourceSetReconciler) reconcileDelete(ctx reconcile.Context, resourceS
 }
 
 func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, phase corev1alpha1.ResourceSetPhase) reconcile.Result {
-	resourceSet.Status.Phase = phase
-
-	ctx.Log.V(1).Info("updating ResourceSet status")
-	if err := r.Status().Update(ctx.Context, &resourceSet); err != nil {
-		ctx.Log.Error(err, "failed to update ResourceSet status")
+	var rs corev1alpha1.ResourceSet
+	if err := r.Get(ctx.Context, resourceSet.NamespacedName(), &rs); err != nil {
 		return ctx.Error(err)
+	}
+
+	rs.Status.Phase = phase
+	rs.Status.ObservedGeneration = rs.GetGeneration()
+	rs.Status.ResourceVersion = rs.GetResourceVersion()
+
+	if util.AsSha256(resourceSet.Status) != util.AsSha256(rs.Status) {
+		ctx.Log.V(1).Info("updating ResourceSet status")
+		if err := r.Status().Update(ctx.Context, &rs); err != nil {
+			ctx.Log.Error(err, "failed to update ResourceSet status")
+			return ctx.Error(err)
+		}
 	}
 
 	return ctx.Done()
@@ -208,7 +226,7 @@ func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ResourceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1alpha1.ResourceSet{}).
+		For(&corev1alpha1.ResourceSet{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
