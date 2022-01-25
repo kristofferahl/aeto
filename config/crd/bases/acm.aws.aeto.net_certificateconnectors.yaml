@@ -116,8 +116,8 @@ spec:
               CertificateConnector
             properties:
               lastUpdated:
-                description: LastUpdated is true when the resource is created and
-                  valid
+                description: LastUpdated contains a timestamp for when the connector
+                  last ran to completion
                 type: string
             type: object
         type: object

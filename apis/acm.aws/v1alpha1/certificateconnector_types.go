@@ -85,7 +85,7 @@ type CertificateConnectorStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// LastUpdated is true when the resource is created and valid
+	// LastUpdated contains a timestamp for when the connector last ran to completion
 	LastUpdated string `json:"lastUpdated,omitempty"`
 }
 

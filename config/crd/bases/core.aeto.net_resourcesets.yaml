@@ -16,7 +16,11 @@ spec:
     singular: resourceset
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: ResourceSet is the Schema for the resourcesets API
@@ -68,6 +72,11 @@ spec:
             type: object
           status:
             description: ResourceSetStatus defines the observed state of ResourceSet
+            properties:
+              phase:
+                description: Phase is the current lifecycle phase of the resource
+                  set.
+                type: string
             type: object
         type: object
     served: true

@@ -74,6 +74,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
 		resourceSet := resourceSet
+		r.updateStatus(c, resourceSet, corev1alpha1.ResourceSetTerminating)
 		return r.reconcileDelete(c, resourceSet)
 	})
 	res, err := reconcile.WithFinalizer(r.Client, rctx, &resourceSet, finalizer)
@@ -82,7 +83,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return *res, err
 	}
 
-	results := make([]reconcile.Result, 0)
+	results := reconcile.ResultList{}
 
 	for _, group := range resourceSet.Spec.Groups {
 		for _, resource := range group.Resources {
@@ -90,6 +91,8 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			results = append(results, result)
 		}
 	}
+
+	results = append(results, r.updateStatus(rctx, resourceSet, corev1alpha1.ResourceSetReconciling))
 
 	return rctx.Complete(results...)
 }
@@ -187,6 +190,18 @@ func (r *ResourceSetReconciler) reconcileDelete(ctx reconcile.Context, resourceS
 	}
 
 	ctx.Log.V(1).Info("all resources belonging to ResourceSet deleted")
+	return ctx.Done()
+}
+
+func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, phase corev1alpha1.ResourceSetPhase) reconcile.Result {
+	resourceSet.Status.Phase = phase
+
+	ctx.Log.V(1).Info("updating ResourceSet status")
+	if err := r.Status().Update(ctx.Context, &resourceSet); err != nil {
+		ctx.Log.Error(err, "failed to update ResourceSet status")
+		return ctx.Error(err)
+	}
+
 	return ctx.Done()
 }
 

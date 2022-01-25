@@ -1,5 +1,6 @@
 namespace: aeto
 resources:
+  - operator-namespace.yaml
   - default-blueprint.yaml
   - default-namespace-template.yaml
   - default-network-policy-template.yaml
