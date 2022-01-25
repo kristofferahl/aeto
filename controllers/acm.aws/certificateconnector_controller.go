@@ -136,16 +136,16 @@ func (r *CertificateConnectorReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		For(&acmawsv1alpha1.CertificateConnector{}).
 		Watches(
 			&source.Kind{Type: &acmawsv1alpha1.Certificate{}},
-			handler.EnqueueRequestsFromMapFunc(r.findObjectsForConfigMap),
+			handler.EnqueueRequestsFromMapFunc(r.findCertificateConnectorsForCertificate),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Complete(r)
 }
 
-func (r *CertificateConnectorReconciler) findObjectsForConfigMap(certificate client.Object) []kreconcile.Request {
+func (r *CertificateConnectorReconciler) findCertificateConnectorsForCertificate(certificate client.Object) []kreconcile.Request {
 	certificateConnectorList := &acmawsv1alpha1.CertificateConnectorList{}
 	listOps := &client.ListOptions{
-		Namespace: "default",
+		Namespace: "default", // TODO: Use namespace of operator
 	}
 	err := r.List(context.TODO(), certificateConnectorList, listOps)
 	if err != nil {
