@@ -87,8 +87,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return r.reconcileDelete(c, resourceSet)
 	})
 	res, err := reconcile.WithFinalizer(r.Client, rctx, &resourceSet, finalizer)
-	if res != nil || err != nil {
-		rctx.Log.V(1).Info("returning finalizer results for ResourceSet", "resource-set", resourceSet.NamespacedName(), "res", res, "error", err)
+	if reconcile.FinalizerInProgress(res, err) {
 		return *res, err
 	}
 

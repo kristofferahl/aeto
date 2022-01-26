@@ -98,8 +98,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return r.reconcileDelete(c, tenant)
 	})
 	res, err := reconcile.WithFinalizer(r.Client, rctx, &tenant, finalizer)
-	if res != nil || err != nil {
-		rctx.Log.V(1).Info("returning finalizer results for Tenant", "tenant", tenant.NamespacedName(), "res", res, "error", err)
+	if reconcile.FinalizerInProgress(res, err) {
 		return *res, err
 	}
 
