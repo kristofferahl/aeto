@@ -211,7 +211,7 @@ func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet 
 	rs.Status.ObservedGeneration = rs.GetGeneration()
 	rs.Status.ResourceVersion = rs.GetResourceVersion()
 
-	if util.AsSha256(resourceSet.Status) != util.AsSha256(rs.Status) {
+	if eq, err := util.Sha256Equal(resourceSet.Status, rs.Status); err != nil || !eq {
 		ctx.Log.V(1).Info("updating ResourceSet status")
 		if err := r.Status().Update(ctx.Context, &rs); err != nil {
 			ctx.Log.Error(err, "failed to update ResourceSet status")

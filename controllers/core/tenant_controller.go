@@ -28,8 +28,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	kreconcile "sigs.k8s.io/controller-runtime/pkg/reconcile" // Required for Watching
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
@@ -446,5 +451,33 @@ func (r *TenantReconciler) updateStatus(ctx reconcile.Context, tenant corev1alph
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.Tenant{}).
+		Watches(
+			&source.Kind{Type: &corev1alpha1.ResourceSet{}},
+			handler.EnqueueRequestsFromMapFunc(r.findTenantForResourceSet),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
+}
+
+func (r *TenantReconciler) findTenantForResourceSet(resourceSet client.Object) []kreconcile.Request {
+	tenantList := &corev1alpha1.TenantList{}
+	// TODO: Implement paging
+	// TODO: Allow operator to define namespaces to watch for tenants
+	options := &client.ListOptions{} // Fetch from all namespaces
+	err := r.List(context.TODO(), tenantList, options)
+	if err != nil {
+		return []kreconcile.Request{}
+	}
+
+	requests := make([]kreconcile.Request, 0)
+	for _, item := range tenantList.Items {
+		requests = append(requests, kreconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+			},
+		})
+
+	}
+	return requests
 }
