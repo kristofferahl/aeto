@@ -429,10 +429,6 @@ func (r *TenantReconciler) updateStatus(ctx reconcile.Context, tenant corev1alph
 		tenant.Status.Blueprint = blueprint.NamespacedName().String() + " v" + blueprint.ResourceVersion
 	}
 
-	if resourceSet != nil {
-		tenant.Status.ResourceSet = resourceSet.NamespacedName().String() + " v" + resourceSet.ResourceVersion
-	}
-
 	ctx.Log.V(1).Info("updating Tenant status")
 	if err := r.Status().Update(ctx.Context, &tenant); err != nil {
 		ctx.Log.Error(err, "failed to update Tenant status")

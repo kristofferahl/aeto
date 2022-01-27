@@ -26,11 +26,6 @@ spec:
       name: Blueprint
       priority: 1
       type: string
-    - description: ResourceSet namespace/name and version
-      jsonPath: .status.resourceSet
-      name: ResourceSet
-      priority: 1
-      type: string
     - description: The phase describing the tenant
       jsonPath: .status.phase
       name: Phase
@@ -74,9 +69,6 @@ spec:
               phase:
                 description: Phase is the current lifecycle phase of the resource
                   set.
-                type: string
-              resourceSet:
-                description: ResourceSet is the resource set namespace/name and version.
                 type: string
             type: object
         type: object

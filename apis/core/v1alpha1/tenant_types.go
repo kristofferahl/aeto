@@ -52,14 +52,11 @@ type TenantStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Blueprint is the blueprint namespace/name and version.
-	Blueprint string `json:"blueprint,omitempty"`
-
-	// ResourceSet is the resource set namespace/name and version.
-	ResourceSet string `json:"resourceSet,omitempty"`
-
 	// Phase is the current lifecycle phase of the resource set.
 	Phase TenantPhase `json:"phase,omitempty"`
+
+	// Blueprint is the blueprint namespace/name and version.
+	Blueprint string `json:"blueprint,omitempty"`
 }
 
 type TenantPhase string
@@ -68,7 +65,6 @@ type TenantPhase string
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="Tenant",priority=0,type="string",JSONPath=".spec.name",description="The name of the tenant"
 //+kubebuilder:printcolumn:name="Blueprint",priority=1,type="string",JSONPath=".status.blueprint",description="Blueprint namespace/name and version"
-//+kubebuilder:printcolumn:name="ResourceSet",priority=1,type="string",JSONPath=".status.resourceSet",description="ResourceSet namespace/name and version"
 //+kubebuilder:printcolumn:name="Phase",priority=0,type="string",JSONPath=".status.phase",description="The phase describing the tenant"
 
 // Tenant is the Schema for the tenants API
