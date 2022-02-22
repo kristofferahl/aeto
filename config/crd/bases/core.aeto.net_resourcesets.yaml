@@ -17,6 +17,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.active
+      name: Active
+      type: boolean
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -48,6 +51,12 @@ spec:
           spec:
             description: ResourceSetSpec defines the desired state of ResourceSet
             properties:
+              active:
+                description: Active defines the state of the ResourceSet. When active,
+                  desired state will be reconciled and deleting the ResourceSet will
+                  cause cleanup of resources defined by the ResourceSet. There should
+                  only ever be a single active ResourceSet per tenant.
+                type: boolean
               groups:
                 description: Groups contains grouped resources
                 items:
@@ -76,11 +85,15 @@ spec:
                   type: object
                 type: array
             required:
+            - active
             - groups
             type: object
           status:
             description: ResourceSetStatus defines the observed state of ResourceSet
             properties:
+              active:
+                description: Active is state of of the resource set.
+                type: boolean
               observedGeneration:
                 description: ObservedGeneration is the last reconciled generation.
                 format: int64
@@ -92,6 +105,8 @@ spec:
               resourceVersion:
                 description: ResourceVersion is the last reconciled resource version.
                 type: string
+            required:
+            - active
             type: object
         type: object
     served: true

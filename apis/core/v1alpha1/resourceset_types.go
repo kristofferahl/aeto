@@ -42,6 +42,9 @@ type ResourceSetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// Active defines the state of the ResourceSet. When active, desired state will be reconciled and deleting the ResourceSet will cause cleanup of resources defined by the ResourceSet. There should only ever be a single active ResourceSet per tenant.
+	Active bool `json:"active"`
+
 	// Groups contains grouped resources
 	// +kubebuilder:validation:Required
 	Groups []ResourceSetResourceGroup `json:"groups"`
@@ -67,6 +70,9 @@ type ResourceSetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// Active is state of of the resource set.
+	Active bool `json:"active"`
+
 	// Phase is the current lifecycle phase of the resource set.
 	Phase ResourceSetPhase `json:"phase,omitempty"`
 
@@ -81,6 +87,7 @@ type ResourceSetPhase string
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Active",priority=0,type=boolean,JSONPath=`.status.active`
 //+kubebuilder:printcolumn:name="Phase",priority=0,type=string,JSONPath=`.status.phase`
 //+kubebuilder:printcolumn:name="Generation",priority=1,type=string,JSONPath=`.status.observedGeneration`
 //+kubebuilder:printcolumn:name="ResourceVersion",priority=1,type=string,JSONPath=`.status.resourceVersion`

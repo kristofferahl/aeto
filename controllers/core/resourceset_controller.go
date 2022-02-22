@@ -34,7 +34,6 @@ import (
 	"github.com/kristofferahl/aeto/internal/pkg/convert"
 	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
-	"github.com/kristofferahl/aeto/internal/pkg/util"
 )
 
 const (
@@ -77,6 +76,10 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	finalizer := reconcile.NewGenericFinalizer(ResourceSetFinalizerName, func(c reconcile.Context) reconcile.Result {
 		resourceSet := resourceSet
+		if !resourceSet.Spec.Active {
+			rctx.Log.Info("ResourceSet inactive, no cleanup before delete")
+			return c.Done()
+		}
 		if resourceSet.Status.Phase != corev1alpha1.ResourceSetTerminating {
 			res := r.updateStatus(c, resourceSet, corev1alpha1.ResourceSetTerminating)
 			if res.Error() {
@@ -93,11 +96,15 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	results := reconcile.ResultList{}
 
-	for _, group := range resourceSet.Spec.Groups {
-		for _, resource := range group.Resources {
-			result := r.applyResource(rctx, resourceSet, group, resource)
-			results = append(results, result)
+	if resourceSet.Spec.Active {
+		for _, group := range resourceSet.Spec.Groups {
+			for _, resource := range group.Resources {
+				result := r.applyResource(rctx, resourceSet, group, resource)
+				results = append(results, result)
+			}
 		}
+	} else {
+		rctx.Log.Info("ResourceSet inactive, skipping reconcile of resources")
 	}
 
 	results = append(results, r.updateStatus(rctx, resourceSet, corev1alpha1.ResourceSetReconciling))
@@ -202,21 +209,15 @@ func (r *ResourceSetReconciler) reconcileDelete(ctx reconcile.Context, resourceS
 }
 
 func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, phase corev1alpha1.ResourceSetPhase) reconcile.Result {
-	var rs corev1alpha1.ResourceSet
-	if err := r.Get(ctx.Context, resourceSet.NamespacedName(), &rs); err != nil {
+	resourceSet.Status.Active = resourceSet.Spec.Active
+	resourceSet.Status.Phase = phase
+	resourceSet.Status.ObservedGeneration = resourceSet.GetGeneration()
+	resourceSet.Status.ResourceVersion = resourceSet.GetResourceVersion()
+
+	ctx.Log.V(1).Info("updating ResourceSet status")
+	if err := r.Status().Update(ctx.Context, &resourceSet); err != nil {
+		ctx.Log.Error(err, "failed to update ResourceSet status")
 		return ctx.Error(err)
-	}
-
-	rs.Status.Phase = phase
-	rs.Status.ObservedGeneration = rs.GetGeneration()
-	rs.Status.ResourceVersion = rs.GetResourceVersion()
-
-	if eq, err := util.Sha256Equal(resourceSet.Status, rs.Status); err != nil || !eq {
-		ctx.Log.V(1).Info("updating ResourceSet status")
-		if err := r.Status().Update(ctx.Context, &rs); err != nil {
-			ctx.Log.Error(err, "failed to update ResourceSet status")
-			return ctx.Error(err)
-		}
 	}
 
 	return ctx.Done()
