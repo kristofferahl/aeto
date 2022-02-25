@@ -28,8 +28,17 @@ type EventStreamChunkSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of EventStreamChunk. Edit eventstreamchunk_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// StreamId defines the ID of the stream
+	StreamId string `json:"streamId"`
+
+	// Events holds the events of the stream chunk
+	Events []EventRecord `json:"events"`
+}
+
+// EventRecord defines an event
+type EventRecord struct {
+	// Raw defines the raw data of the event
+	Raw string `json:"raw"`
 }
 
 // EventStreamChunkStatus defines the observed state of EventStreamChunk

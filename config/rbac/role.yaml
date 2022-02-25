@@ -171,6 +171,32 @@ rules:
   - patch
   - update
 - apiGroups:
+  - event.aeto.net
+  resources:
+  - eventstreamchunks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - event.aeto.net
+  resources:
+  - eventstreamchunks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - event.aeto.net
+  resources:
+  - eventstreamchunks/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - route53.aws.aeto.net
   resources:
   - hostedzones
