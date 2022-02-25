@@ -1,0 +1,24 @@
+# permissions for end users to edit eventstreamchunks.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: eventstreamchunk-editor-role
+rules:
+- apiGroups:
+  - event.aeto.net
+  resources:
+  - eventstreamchunks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - event.aeto.net
+  resources:
+  - eventstreamchunks/status
+  verbs:
+  - get

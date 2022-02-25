@@ -47,9 +47,11 @@ import (
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
 	route53awsv1alpha1 "github.com/kristofferahl/aeto/apis/route53.aws/v1alpha1"
 	acmawscontrollers "github.com/kristofferahl/aeto/controllers/acm.aws"
 	corecontrollers "github.com/kristofferahl/aeto/controllers/core"
+	eventcontrollers "github.com/kristofferahl/aeto/controllers/event"
 	route53awscontrollers "github.com/kristofferahl/aeto/controllers/route53.aws"
 	//+kubebuilder:scaffold:imports
 )
@@ -65,6 +67,7 @@ func init() {
 	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(route53awsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(acmawsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(eventv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -233,6 +236,15 @@ func main() {
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CertificateConnector")
+			os.Exit(1)
+		}
+	}
+	if util.SliceContainsString(enabledControllers, "EventStreamChunk") {
+		if err = (&eventcontrollers.EventStreamChunkReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "EventStreamChunk")
 			os.Exit(1)
 		}
 	}
