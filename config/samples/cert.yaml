@@ -1,0 +1,15 @@
+apiVersion: acm.aws.aeto.net/v1alpha1
+kind: Certificate
+metadata:
+  name: foo-cert
+  namespace: aeto
+  annotations:
+    aeto.net/controlled: "true"
+spec:
+  domainName: foo.aeto.dotnetmentor.se
+  tags:
+    "Name": "foo-cert"
+    "ManagedBy": "aeto"
+  validation:
+    dns:
+      hostedZoneId: "Z09971642CKL6Q283TIIE"

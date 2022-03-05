@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+
+print() {
+  echo
+  echo 'ResourceTemplate'
+  kubectl get resourcetemplate -A -o wide
+
+  echo
+  echo 'Blueprint'
+  kubectl get blueprint -A -o wide
+
+  echo
+  echo 'Tenant'
+  kubectl get tenant -A -o wide
+
+  echo
+  echo 'EventStreamChunk'
+  kubectl get eventstreamchunk -A -o wide
+
+  echo
+  echo 'ResourceSet'
+  kubectl get resourceset -A -o wide
+
+  echo
+  echo 'Namespaces'
+  kubectl get namespaces | grep 'tenant-'
+
+  echo
+  echo 'NetworkPolicy'
+  kubectl get networkpolicy -A
+
+  echo
+  echo 'LimitRange'
+  kubectl get limitrange -A
+
+  echo
+  echo 'AWS Route53 HostedZone'
+  kubectl get hostedzone -A -o wide
+
+  echo
+  echo 'AWS ACM Certificate'
+  kubectl get certificate -A -o wide
+
+  echo
+  echo 'AWS ACM CertificateConnector'
+  kubectl get certificateconnector -A -o wide
+
+  echo
+  echo 'Deployment'
+  kubectl get deployment -A | grep 'tenant-'
+
+  echo
+  echo 'Service'
+  kubectl get service -A | grep 'tenant-'
+
+  echo
+  echo 'Ingress'
+  kubectl get ingress -A | grep 'tenant-'
+
+  echo
+}
+
+apply() {
+  kubectl apply -k config/default-resources/
+  kubectl apply -k config/samples/
+  echo 'watching Tenant and ResourceSets...'
+  # kubectl -n default wait --for=condition=ready -o name tenant example
+  sleep 1
+  while true; do
+    clear
+    kubectl -n default get tenant example -o wide
+    echo
+    kubectl -n aeto get resourcesets -o wide
+    sleep 3
+  done
+}
+
+destroy() {
+  kubectl delete -k config/samples/
+  print
+  echo 'Press any key to continue running a full cleanup...'
+  read -r
+  cleanup
+}
+
+cleanup() {
+  echo 'running a full cleanup'
+  kubectl delete -k config/default-resources/
+  # shellcheck disable=SC2046
+  kubectl -n aeto delete resourceset $(kubectl -n aeto get resourceset -o jsonpath='{.items[*].metadata.name}')
+  # shellcheck disable=SC2046
+  kubectl -n aeto delete eventstreamchunk $(kubectl -n aeto get eventstreamchunk -o jsonpath='{.items[*].metadata.name}')
+  kubectl delete namespace tenant-example
+}
+
+watch() {
+  while true; do
+    clear && print && sleep 1
+  done
+}
+
+localenv() {
+  {
+    sed "/AWS_REGION=.*/d" <.env |
+      sed "/AWS_ACCESS_KEY_ID=.*/d" |
+      sed "/AWS_SECRET_ACCESS_KEY=.*/d" |
+      sed "/AWS_SESSION_TOKEN=.*/d"
+    echo "AWS_REGION=${AWS_REGION:?}"
+    echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:?}"
+    echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:?}"
+    echo "AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:?}"
+  } >.tempenv
+  mv .tempenv .env
+}
+
+main() {
+  case "${1:-}" in
+  localenv) localenv ;;
+  apply) apply ;;
+  destroy) destroy ;;
+  cleanup) cleanup ;;
+  watch) watch ;;
+  *) print ;;
+  esac
+}
+
+main "$@"

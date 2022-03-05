@@ -89,11 +89,11 @@ func (r *HostedZoneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	hz, hzns, hostedZoneResult := r.reconcileHostedZone(rctx, hostedZone)
 	results = append(results, hostedZoneResult)
 
-	if results.Success() {
+	if results.AllSuccessful() {
 		chz, cns, connectionResult := r.reconcileHostedZoneConnection(rctx, hostedZone, hzns)
 		results = append(results, connectionResult)
 
-		if results.Success() {
+		if results.AllSuccessful() {
 			statusRes := r.reconcileStatus(rctx, hostedZone, hz, chz, cns)
 			results = append(results, statusRes)
 		}
@@ -137,7 +137,7 @@ func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hosted
 			var nshz *types.NoSuchHostedZone
 			if errors.As(err, &nshz) {
 				ctx.Log.Info("AWS Route53 HostedZone not found", "id", id)
-				return nil, nil, ctx.RequeueIn(5)
+				return nil, nil, ctx.RequeueIn(5, fmt.Sprintf("AWS Route53 HostedZone with id %s was not found", id))
 			}
 
 			ctx.Log.Error(err, "failed to fetch AWS Route53 HostedZone", "id", id)
@@ -163,8 +163,8 @@ func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hosted
 
 		return &hz, nil, ctx.Done()
 	}
-	// No id set yet, retry in 15
-	return nil, nil, ctx.RequeueIn(15)
+
+	return nil, nil, ctx.RequeueIn(15, "no AWS Route53 HostedZone id set")
 }
 
 func (r *HostedZoneReconciler) reconcileHostedZoneConnection(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone, nsRecordSet *types.ResourceRecordSet) (*types.HostedZone, *types.ResourceRecordSet, reconcile.Result) {
@@ -174,7 +174,7 @@ func (r *HostedZoneReconciler) reconcileHostedZoneConnection(ctx reconcile.Conte
 	}
 
 	if nsRecordSet == nil {
-		return nil, nil, ctx.RequeueIn(5)
+		return nil, nil, ctx.RequeueIn(5, "NS recordset not yet available for AWS Route53 HostedZone")
 	}
 
 	phz, err := r.AWS.FindOneRoute53HostedZoneByName(ctx.Context, hostedZone.Spec.ConnectWith.Name)
@@ -185,7 +185,7 @@ func (r *HostedZoneReconciler) reconcileHostedZoneConnection(ctx reconcile.Conte
 
 	if phz == nil {
 		ctx.Log.V(1).Info("no matching AWS Route53 HostedZone found, unable to reconcile NS record connection", "name", hostedZone.Spec.ConnectWith.Name)
-		return nil, nil, ctx.RequeueIn(15)
+		return nil, nil, ctx.RequeueIn(15, fmt.Sprintf("no matching AWS Route53 HostedZone found for %s", hostedZone.Spec.ConnectWith.Name))
 	}
 
 	nsRecordSet.TTL = &hostedZone.Spec.ConnectWith.TTL
@@ -199,7 +199,7 @@ func (r *HostedZoneReconciler) reconcileHostedZoneConnection(ctx reconcile.Conte
 	phzns, err := r.getHostedZoneNsRecordSet(ctx, *phz.Id, *nsRecordSet.Name)
 	if err != nil {
 		ctx.Log.V(1).Info("failed to fetch NS recordset for AWS Route53 HostedZone", "name", *phz.Name, "id", *phz.Id)
-		return phz, nil, ctx.RequeueIn(15)
+		return phz, nil, ctx.RequeueIn(15, fmt.Sprintf("failed to fetch NS recordset for AWS Route53 HostedZone %s", *phz.Name))
 	}
 
 	return phz, phzns, ctx.Done()
@@ -268,8 +268,8 @@ func (r *HostedZoneReconciler) reconcileDelete(ctx reconcile.Context, hostedZone
 	if err != nil {
 		var hzne *types.HostedZoneNotEmpty
 		if errors.As(err, &hzne) {
-			ctx.Log.Info("AWS Route53 HostedZone contains non-required resource record sets and cannot be deleted, retrying", "id", id)
-			return ctx.RequeueIn(60) // NOTE: Should we requeue with error instead to to utilize backoff strategy?
+			ctx.Log.Info("AWS Route53 HostedZone contains non-required resource record sets and cannot be deleted", "id", id)
+			return ctx.RequeueIn(60, "AWS Route53 HostedZone contains non-required resource record sets and cannot be deleted") // TODO: Should we requeue with error instead to to utilize backoff strategy?
 		} else {
 			ctx.Log.Error(err, "failed to delete AWS Route53 HostedZone", "id", id)
 			return ctx.Error(err)

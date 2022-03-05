@@ -39,14 +39,8 @@ type EventList []Event
 
 // TODO: Add Event Timestamp
 type Event interface {
-	// StreamId returns the id of the aggregate referenced by the event
-	StreamId() string
-
 	// EventSequence returns the sequence number of this event
 	EventSequence() int64
-
-	// setStreamId sets the stream id
-	setStreamId(s string)
 
 	// setEventSequence sets the sequence number
 	setEventSequence(s int64)
@@ -59,23 +53,12 @@ type Record struct {
 }
 
 type EventModel struct {
-	// Id contains the stream id
-	Id string
-
 	// Sequence contains the event sequence number
-	Sequence int64
-}
-
-func (m *EventModel) StreamId() string {
-	return m.Id
+	Sequence int64 `json:"sequence"`
 }
 
 func (m *EventModel) EventSequence() int64 {
 	return m.Sequence
-}
-
-func (m *EventModel) setStreamId(s string) {
-	m.Id = s
 }
 
 func (m *EventModel) setEventSequence(s int64) {

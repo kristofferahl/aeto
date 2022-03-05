@@ -79,6 +79,7 @@ func main() {
 	var operatorNamespace string
 	var operatorReconcileInterval time.Duration
 	var operatorEnabledControllers string
+	var operatorMaxTenantResourceSets int
 
 	// Kubebuilder flags
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -92,6 +93,7 @@ func main() {
 	// Operator flags
 	flag.StringVar(&operatorNamespace, "operator-namespace", "aeto", "The operator namespace.")
 	flag.DurationVar(&operatorReconcileInterval, "operator-reconcile-interval", 60*time.Minute, "The interval of the reconciliation loop")
+	flag.IntVar(&operatorMaxTenantResourceSets, "operator-max-tenant-resourcesets", 3, "The maximum number of resourcesets kept for each tenant")
 
 	// Parse flags
 	flag.Parse()
@@ -100,6 +102,7 @@ func main() {
 	// Operator environment overrides
 	operatorNamespace = config.StringEnvVar("OPERATOR_NAMESPACE", operatorNamespace)
 	operatorReconcileInterval = config.DurationEnvVar("OPERATOR_RECONCILE_INTERVAL", operatorReconcileInterval)
+	operatorMaxTenantResourceSets = config.IntEnvVar("OPERATOR_MAX_TENANT_RESOURCESETS", operatorMaxTenantResourceSets)
 	operatorEnabledControllers = config.StringEnvVar("OPERATOR_ENABLED_CONTROLLERS", strings.Join([]string{
 		"Tenant",
 		"ResourceTemplate",
@@ -108,6 +111,7 @@ func main() {
 		"HostedZone",
 		"Certificate",
 		"CertificateConnector",
+		"EventStreamChunk",
 	}, ","))
 
 	enabledControllers := strings.Split(strings.TrimLeft(strings.TrimRight(operatorEnabledControllers, ","), ","), ",")
@@ -120,8 +124,9 @@ func main() {
 
 	// Configure operator
 	config.Operator = config.OperatorConfig{
-		ReconcileInterval: operatorReconcileInterval,
-		Namespace:         operatorNamespace,
+		ReconcileInterval:     operatorReconcileInterval,
+		Namespace:             operatorNamespace,
+		MaxTenantResourceSets: operatorMaxTenantResourceSets,
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{

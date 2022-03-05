@@ -9,8 +9,8 @@ import (
 )
 
 type jsonEvent struct {
-	Type string
-	Data json.RawMessage
+	Type  string          `json:"type"`
+	Event json.RawMessage `json:"event"`
 }
 
 // JsonSerializer provides a simple serializer implementation
@@ -38,8 +38,8 @@ func (j *JsonSerializer) MarshalEvent(v eventsource.Event) (eventsource.Record, 
 	}
 
 	data, err = json.Marshal(jsonEvent{
-		Type: eventType,
-		Data: json.RawMessage(data),
+		Type:  eventType,
+		Event: json.RawMessage(data),
 	})
 	if err != nil {
 		return eventsource.Record{}, fmt.Errorf("unable to encode event")
@@ -64,7 +64,7 @@ func (j *JsonSerializer) UnmarshalEvent(record eventsource.Record) (eventsource.
 	}
 
 	v := reflect.New(t).Interface()
-	err = json.Unmarshal(wrapper.Data, v)
+	err = json.Unmarshal(wrapper.Event, v)
 	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal event data into %#v", v)
 	}

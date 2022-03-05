@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -13,6 +14,15 @@ func StringEnvVar(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+func IntEnvVar(key string, defaultValue int) int {
+	v := StringEnvVar(key, fmt.Sprintf("%d", defaultValue))
+	pv, err := strconv.Atoi(v)
+	if err != nil {
+		log.Panicf("failed parsing int from environment variable %s", key)
+	}
+	return pv
 }
 
 func BoolEnvVar(key string, defaultValue bool) bool {

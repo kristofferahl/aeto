@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/eventstore"
@@ -77,6 +78,43 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	rctx.Log.V(1).Info("found Tenant")
 
+	finalizer := reconcile.NewGenericFinalizer(TenantFinalizerName, func(c reconcile.Context) reconcile.Result {
+		streamId := eventstore.StreamId(req.NamespacedName.String())
+		store := eventstore.New(r.Client, rctx.Log, rctx.Context, serializer)
+		stream, err := store.Get(streamId)
+		if err != nil {
+			return rctx.Error(err)
+		}
+		if stream.Length() > 0 {
+			results := reconcile.ResultList{}
+
+			results = append(results, ReconcileStatus(rctx, r.Client, tenant, stream))
+			results = append(results, ReconcileOrphanedResources(rctx, r.Dynamic, stream))
+			results = append(results, ReconcileDelete(rctx, r.Client, store, stream))
+
+			if results.AllDone() {
+				return rctx.Done()
+			}
+
+			rctx.Log.V(1).Info("event stream found, loading Tenant aggregate from history")
+			t := domain.NewTenantFromEvents(stream)
+
+			t.Delete()
+
+			_, err := store.Save(t)
+			if err != nil {
+				return rctx.Error(err)
+			} else {
+				return rctx.RequeueIn(5, "events might need to be processed in the finalizer process")
+			}
+		}
+		return rctx.Done()
+	})
+	res, err := reconcile.WithFinalizer(r.Client, rctx, &tenant, finalizer)
+	if reconcile.FinalizerInProgress(res, err) {
+		return *res, err
+	}
+
 	blueprintRef := types.NamespacedName{
 		Namespace: config.Operator.Namespace,
 		Name:      tenant.Blueprint(),
@@ -86,37 +124,62 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		rctx.Log.Info("Blueprint not found", "blueprint", blueprintRef.String())
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	rctx.Log.V(1).Info("Blueprint found", "blueprint", blueprintRef.String())
 
 	streamId := eventstore.StreamId(req.NamespacedName.String())
 	store := eventstore.New(r.Client, rctx.Log, rctx.Context, serializer)
 	stream, err := store.Get(streamId)
 	if err != nil {
-		return rctx.Error(err).AsCtrlResultError()
+		return ctrl.Result{}, err
 	}
 
 	results := reconcile.ResultList{}
 
 	if stream.Length() == 0 {
-		rctx.Log.V(1).Info("No events, creating new Tenant aggregate")
-		t := domain.NewTenant(streamId)
-
-		t.SetName(tenant.Spec.Name)
-		t.SetBlueprintName(blueprint.Name)
-
-		err := store.Save(t)
-		if err != nil {
-			results = append(results, rctx.Error(err))
-		}
-	} else {
-		rctx.Log.V(1).Info("Event stream found, loading Tenant Aggregate from history")
-		t := domain.NewTenantFromEvents(stream)
-
 		sr := ReconcileStatus(rctx, r.Client, tenant, stream)
 		results = append(results, sr)
 
-		err := store.Save(t)
+		rctx.Log.V(1).Info("no events, creating new Tenant aggregate")
+		t := domain.NewTenant(streamId)
+
+		t.Initialize(tenant.Name, tenant.Namespace)
+		t.SetDisplayName(tenant.Spec.Name)
+		t.SetBlueprintName(blueprint.Name)
+
+		events, err := store.Save(t)
 		if err != nil {
 			results = append(results, rctx.Error(err))
+		} else if events > 0 {
+			results = append(results, rctx.RequeueIn(5, "new events needs processing by the controller"))
+		}
+	} else {
+		rctx.Log.V(1).Info("event stream found, loading Tenant aggregate from history")
+		t := domain.NewTenantFromEvents(stream)
+
+		results = append(results, ReconcileResourceSet(rctx, r.Client, stream))
+		results = append(results, ReconcileOrphanedResources(rctx, r.Dynamic, stream))
+		results = append(results, ReconcileRequeueRequest(rctx, stream))
+		results = append(results, ReconcileStatus(rctx, r.Client, tenant, stream))
+
+		t.SetDisplayName(tenant.Spec.Name)
+		t.SetBlueprintName(blueprint.Name)
+
+		generator := domain.NewResourceGenerator(rctx, domain.ResourceGeneratoreServices{
+			Client:  r.Client,
+			Dynamic: r.Dynamic,
+		})
+
+		err = t.From(generator, tenant, blueprint)
+		if err != nil {
+			rctx.Log.Error(err, "failed to generate events from blueprint")
+			results = append(results, rctx.Error(err))
+		}
+
+		events, err := store.Save(t)
+		if err != nil {
+			results = append(results, rctx.Error(err))
+		} else if events > 0 {
+			results = append(results, rctx.RequeueIn(5, "new events needs processing by the controller"))
 		}
 	}
 
@@ -141,6 +204,16 @@ func (r *TenantReconciler) getBlueprint(ctx reconcile.Context, nn types.Namespac
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &eventv1alpha1.EventStreamChunk{}, eventstore.StreamIdFieldIndexKey, func(o client.Object) []string {
+		chunk := o.(*eventv1alpha1.EventStreamChunk)
+		if chunk.Spec.StreamId == "" {
+			return nil
+		}
+		return []string{chunk.Spec.StreamId}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.Tenant{}).
 		Complete(r)

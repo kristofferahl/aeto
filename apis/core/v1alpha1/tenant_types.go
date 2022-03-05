@@ -24,15 +24,6 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// These are the valid phases of a namespace.
-const (
-	// TenantReconciling means the tenant is reconciling
-	TenantReconciling TenantPhase = "Reconciling"
-
-	// TenantTerminating means the tenant is undergoing graceful termination
-	TenantTerminating TenantPhase = "Terminating"
-)
-
 // TenantSpec defines the desired state of Tenant
 type TenantSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -52,20 +43,30 @@ type TenantStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Phase is the current lifecycle phase of the resource set.
-	Phase TenantPhase `json:"phase,omitempty"`
-
-	// Blueprint is the blueprint namespace/name and version.
+	// Blueprint is the Blueprint used for the Tenant.
 	Blueprint string `json:"blueprint,omitempty"`
-}
 
-type TenantPhase string
+	// ResourceSet is the ResourceSet name used for the Tenant.
+	ResourceSet string `json:"resourceSet,omitempty"`
+
+	// Events is the number of events produced for the Tenant.
+	Events int `json:"events,omitempty"`
+
+	// Phase is the current lifecycle phase of the Tenant.
+	Phase string `json:"phase,omitempty"`
+
+	// Conditions represent the latest available observations of the Tenants state.
+	Conditions []metav1.Condition `json:"conditions"`
+}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Tenant",priority=0,type="string",JSONPath=".spec.name",description="The name of the tenant"
-//+kubebuilder:printcolumn:name="Blueprint",priority=1,type="string",JSONPath=".status.blueprint",description="Blueprint namespace/name and version"
-//+kubebuilder:printcolumn:name="Phase",priority=0,type="string",JSONPath=".status.phase",description="The phase describing the tenant"
+//+kubebuilder:printcolumn:name="Tenant",priority=0,type="string",JSONPath=".spec.name",description="The display name of the tenant"
+//+kubebuilder:printcolumn:name="Blueprint",priority=1,type="string",JSONPath=".status.blueprint",description="Blueprint name"
+//+kubebuilder:printcolumn:name="ResourceSet",priority=1,type="string",JSONPath=".status.resourceSet",description="ResourceSet name"
+//+kubebuilder:printcolumn:name="Events",priority=1,type="string",JSONPath=".status.events",description="Events produced for tenant"
+//+kubebuilder:printcolumn:name="Phase",priority=0,type="string",JSONPath=".status.phase",description="Tenant lifecycle phase"
+//+kubebuilder:printcolumn:name="Ready",priority=0,type="string",JSONPath=`.status.conditions[?(@.type == "Ready")].status`,description="Tenant ready"
 
 // Tenant is the Schema for the tenants API
 type Tenant struct {

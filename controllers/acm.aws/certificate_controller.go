@@ -31,6 +31,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/aws/smithy-go"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	awsclients "github.com/kristofferahl/aeto/internal/pkg/aws"
@@ -90,7 +91,7 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	cd, certificateResult := r.reconcileCertificate(rctx, certificate)
 	results = append(results, certificateResult)
 
-	if results.Success() {
+	if results.AllSuccessful() {
 		validationResult := r.reconcileCertificateValidation(rctx, certificate, cd)
 		results = append(results, validationResult)
 
@@ -130,7 +131,7 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 			var rnfe *acmtypes.ResourceNotFoundException
 			if errors.As(err, &rnfe) {
 				ctx.Log.Info("AWS ACM Certificate details not found", "arn", ca)
-				return nil, ctx.RequeueIn(5)
+				return nil, ctx.RequeueIn(5, fmt.Sprintf("AWS ACM Certificate details not found for arn %s", ca))
 			} else {
 				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate", "arn", ca)
 				return nil, ctx.Error(err)
@@ -147,14 +148,13 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 		return &cd, ctx.Done()
 	}
 
-	// No arn set yet, retry in 15
-	return nil, ctx.RequeueIn(15)
+	return nil, ctx.RequeueIn(15, "no AWS ACM Certificate arn set")
 }
 
 func (r *CertificateReconciler) reconcileCertificateValidation(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, details *acmtypes.CertificateDetail) reconcile.Result {
 	if details == nil {
-		ctx.Log.V(1).Info("waiting for details on AWS ACM Certificate, skipping reconcile of certificate validation")
-		return ctx.RequeueIn(15)
+		ctx.Log.V(1).Info("waiting for details on AWS ACM Certificate to become available, skipping reconcile of certificate validation")
+		return ctx.RequeueIn(15, "waiting for details on AWS ACM Certificate to become available")
 	}
 
 	if certificate.Spec.Validation != nil {
@@ -180,8 +180,8 @@ func (r *CertificateReconciler) reconcileCertificateDnsValidationRecord(ctx reco
 	}
 
 	if dvo.ResourceRecord == nil {
-		ctx.Log.V(1).Info("AWS ACM Certificate domain validation option is missing it's resource record, retrying...", "domain-name", details.DomainName, "arn", details.CertificateArn)
-		return ctx.RequeueIn(5)
+		ctx.Log.V(1).Info("AWS ACM Certificate domain validation option is missing it's resource record", "domain-name", details.DomainName, "arn", details.CertificateArn)
+		return ctx.RequeueIn(5, "AWS ACM Certificate domain validation option is missing it's resource record")
 	}
 
 	recordSet := route53types.ResourceRecordSet{
@@ -203,8 +203,7 @@ func (r *CertificateReconciler) reconcileCertificateDnsValidationRecord(ctx reco
 	}
 
 	if details.Status == acmtypes.CertificateStatusPendingValidation {
-		// while we wait for validation to complete, requeue in shorter intervals
-		return ctx.RequeueIn(15)
+		return ctx.RequeueIn(15, "waiting for domain validation to complete")
 	}
 
 	return ctx.Done()
@@ -249,16 +248,23 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 				ctx.Log.Info("deleting Domain Validation record for AWS ACM Certificate", "arn", ca, "hosted-zone-id", certificate.Spec.Validation.Dns.HostedZonedId, "recordset", recordSet)
 				err := r.AWS.DeleteRoute53ResourceRecordSet(ctx.Context, certificate.Spec.Validation.Dns.HostedZonedId, recordSet, "deleting DNS validation record for AWS ACM Certificate")
 				if err != nil {
+					var oe *smithy.OperationError
+					if errors.As(err, &oe) {
+						if strings.Contains(oe.Error(), "NoSuchHostedZone") {
+							ctx.Log.Info("ignoring NoSuchHostedZone error", "message", oe.Error())
+							continue
+						}
+					}
+
 					var cbe *route53types.InvalidChangeBatch
 					if errors.As(err, &cbe) {
 						if strings.Contains(cbe.ErrorMessage(), "not found") {
-							ctx.Log.Info("ignoring change batch error", "error-message", cbe.ErrorMessage())
-						} else {
-							return ctx.Error(err)
+							ctx.Log.Info("ignoring InvalidChangeBatch error", "message", cbe.ErrorMessage())
+							continue
 						}
-					} else {
-						return ctx.Error(err)
 					}
+
+					return ctx.Error(err)
 				}
 			}
 		}

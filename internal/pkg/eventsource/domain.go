@@ -46,7 +46,6 @@ func (a *AggregateRoot) Version() int64 {
 }
 
 func (a *AggregateRoot) Apply(e Event) {
-	e.setStreamId(a.Id())
 	e.setEventSequence(a.lastEventSequence + 1)
 	a.applyToInternalState(e)
 	a.uncommitted = append(a.uncommitted, e)

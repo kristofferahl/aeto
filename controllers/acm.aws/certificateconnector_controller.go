@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"               // Required for Watching
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
@@ -73,7 +74,7 @@ func (r *CertificateConnectorReconciler) Reconcile(ctx context.Context, req ctrl
 
 	certificates, listRes := r.getCertificates(rctx, certificateConnector)
 	results = append(results, listRes)
-	if results.Success() {
+	if results.AllSuccessful() {
 		connector, err := NewConnector(r.Client, certificateConnector)
 		if err != nil {
 			rctx.Log.Error(err, "failed to create connector", "certificate-connector", certificateConnector.NamespacedName())
@@ -145,7 +146,7 @@ func (r *CertificateConnectorReconciler) SetupWithManager(mgr ctrl.Manager) erro
 func (r *CertificateConnectorReconciler) findCertificateConnectorsForCertificate(certificate client.Object) []kreconcile.Request {
 	certificateConnectorList := &acmawsv1alpha1.CertificateConnectorList{}
 	listOps := &client.ListOptions{
-		Namespace: "default", // TODO: Use namespace of operator
+		Namespace: config.Operator.Namespace,
 	}
 	err := r.List(context.TODO(), certificateConnectorList, listOps)
 	if err != nil {

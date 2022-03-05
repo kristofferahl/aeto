@@ -17,10 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"encoding/json"
-	"fmt"
-
-	"github.com/PaesslerAG/jsonpath"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -35,6 +31,9 @@ const (
 
 	// ResourceSetTerminating means the resource set is undergoing graceful termination
 	ResourceSetTerminating ResourceSetPhase = "Terminating"
+
+	// ResourceSetPaused means the resource set reconciliation has been paused
+	ResourceSetPaused ResourceSetPhase = "Paused"
 )
 
 // ResourceSetSpec defines the desired state of ResourceSet
@@ -45,24 +44,27 @@ type ResourceSetSpec struct {
 	// Active defines the state of the ResourceSet. When active, desired state will be reconciled and deleting the ResourceSet will cause cleanup of resources defined by the ResourceSet. There should only ever be a single active ResourceSet per tenant.
 	Active bool `json:"active"`
 
-	// Groups contains grouped resources
-	// +kubebuilder:validation:Required
-	Groups []ResourceSetResourceGroup `json:"groups"`
-}
-
-// ResourceSetResourceGroup defines a grouped set of resources, generated from a resource template
-type ResourceSetResourceGroup struct {
-	// Name holds the name of the resource group
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// SourceTemplate contains a reference to the template used to genererate the resource group
-	// +kubebuilder:validation:Required
-	SourceTemplate string `json:"sourceTemplate"`
-
 	// Resources contains embedded resources
 	// +kubebuilder:validation:Required
-	Resources []EmbeddedResource `json:"resources"`
+	Resources ResourceSetResourceList `json:"resources"`
+}
+
+// ResourceSetResourceList defines a list of resources in a ResourceSet
+type ResourceSetResourceList []ResourceSetResource
+
+// ResourceSetResource defines a resource in a ResourceSet
+type ResourceSetResource struct {
+	// Id holds the unique identifier of the resource
+	// +kubebuilder:validation:Required
+	Id string `json:"id"`
+
+	// Order holds the desired order in which the resource should be applied
+	// +kubebuilder:validation:Required
+	Order int `json:"order"`
+
+	// Embedded holds an embedded kubernetes resource
+	// +kubebuilder:validation:Required
+	Embedded EmbeddedResource `json:"embedded"`
 }
 
 // ResourceSetStatus defines the observed state of ResourceSet
@@ -70,11 +72,11 @@ type ResourceSetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Active is state of of the resource set.
-	Active bool `json:"active"`
-
-	// Phase is the current lifecycle phase of the resource set.
+	// Phase is the current lifecycle phase of the ResourceSet.
 	Phase ResourceSetPhase `json:"phase,omitempty"`
+
+	// Conditions represent the latest available observations of the ResourceSet state.
+	Conditions []metav1.Condition `json:"conditions"`
 
 	// ObservedGeneration is the last reconciled generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -87,9 +89,10 @@ type ResourceSetPhase string
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Active",priority=0,type=boolean,JSONPath=`.status.active`
+//+kubebuilder:printcolumn:name="Active",priority=0,type=string,JSONPath=`.status.conditions[?(@.type == "Active")].status`
 //+kubebuilder:printcolumn:name="Phase",priority=0,type=string,JSONPath=`.status.phase`
-//+kubebuilder:printcolumn:name="Generation",priority=1,type=string,JSONPath=`.status.observedGeneration`
+//+kubebuilder:printcolumn:name="Ready",priority=0,type=string,JSONPath=`.status.conditions[?(@.type == "Ready")].message`
+//+kubebuilder:printcolumn:name="ObservedGeneration",priority=1,type=string,JSONPath=`.status.observedGeneration`
 //+kubebuilder:printcolumn:name="ResourceVersion",priority=1,type=string,JSONPath=`.status.resourceVersion`
 
 // ResourceSet is the Schema for the resourcesets API
@@ -110,40 +113,26 @@ type ResourceSetList struct {
 	Items           []ResourceSet `json:"items"`
 }
 
-// Group returns a resource group matching the specified name
-func (rs ResourceSet) Group(name string) (*ResourceSetResourceGroup, error) {
-	for _, group := range rs.Spec.Groups {
-		if group.Name == name {
-			return &group, nil
-		}
-	}
-	return nil, fmt.Errorf("resource group %s not found", name)
-}
-
-// JsonPath returns a value from the resource group JSON representation using the given path
-func (g *ResourceSetResourceGroup) JsonPath(path string) (string, error) {
-	bytes, err := json.Marshal(g)
-	if err != nil {
-		return "", err
-	}
-
-	v := interface{}(nil)
-	json.Unmarshal(bytes, &v)
-
-	value, err := jsonpath.Get(fmt.Sprintf("$%s", path), v)
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("%s", value), nil
-}
-
 // NamespacedName returns a namespaced name for the custom resource
 func (rs ResourceSet) NamespacedName() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: rs.Namespace,
 		Name:      rs.Name,
 	}
+}
+
+// Find returns the first matching resource and it's index in the list matching the specified id
+func (rl ResourceSetResourceList) Find(id string) (index int, existing *ResourceSetResource) {
+	index = -1
+	for i, r := range rl {
+		idEqual := r.Id == id
+		if idEqual {
+			existing = &r
+			index = i
+			break
+		}
+	}
+	return
 }
 
 func init() {

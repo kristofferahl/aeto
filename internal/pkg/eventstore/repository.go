@@ -3,6 +3,7 @@ package eventstore
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -12,8 +13,12 @@ import (
 	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var StreamIdFieldIndexKey = "spec.streamId"
 
 type Repository struct {
 	client.Client
@@ -53,11 +58,11 @@ func (r Repository) Get(streamId string) (eventsource.Stream, error) {
 	return stream, nil
 }
 
-func (r Repository) Save(aggregate eventsource.Aggregate) error {
+func (r Repository) Save(aggregate eventsource.Aggregate) (events int, err error) {
 	commit := aggregate.Commit()
 	chunk, err := r.convertToEventStreamChunk(commit, aggregate.Id())
 	if err != nil {
-		return err
+		return 0, err
 	}
 	count := len(chunk.Spec.Events)
 	if count > 0 {
@@ -65,39 +70,64 @@ func (r Repository) Save(aggregate eventsource.Aggregate) error {
 			FieldManager: "aeto",
 		})
 		if err != nil {
+			return 0, err
+		}
+		r.Log.V(1).Info(fmt.Sprintf("Committed %d event(s) to %s, aggregate %s is at version %d", count, chunk.Name, aggregate.Id(), aggregate.Version()))
+	} else {
+		r.Log.V(1).Info(fmt.Sprintf("0 events to commit, aggregate %s is at version %d", aggregate.Id(), aggregate.Version()))
+	}
+	return count, nil
+}
+
+func (r Repository) Delete(stream eventsource.Stream) error {
+	// TODO: Implement delete of EventStreamChunks using DeleteAllOf and FieldSelector
+	commits := stream.Commits
+	sort.Slice(commits[:], func(i, j int) bool {
+		return commits[i].Id > commits[j].Id
+	})
+
+	deleted := 0
+	for _, c := range commits {
+		nn := types.NamespacedName{
+			Namespace: config.Operator.Namespace,
+			Name:      c.Id,
+		}
+		r.Log.V(1).Info("deleting EventStreamChunk", "chunk", nn.String())
+		if err := r.Client.Delete(r.Context, &eventv1alpha1.EventStreamChunk{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: nn.Namespace,
+				Name:      nn.Name,
+			},
+		}); client.IgnoreNotFound(err) != nil {
+			r.Log.Error(err, "failed to delete EventStreamChunk", "chunk", nn.String())
 			return err
 		}
-		r.Log.V(1).Info(fmt.Sprintf("Committed %d event(s) to %s, aggregate %s is at version %d\n", count, chunk.Name, aggregate.Id(), aggregate.Version()))
-	} else {
-		r.Log.V(1).Info(fmt.Sprintf("0 events to commit, aggregate %s is at version %d\n", aggregate.Id(), aggregate.Version()))
+		deleted++
 	}
+
+	if deleted != len(commits) {
+		return fmt.Errorf("not all EventStreamChunk(s) were deleted")
+	}
+
 	return nil
 }
 
 func (r Repository) getEventStreamChunks(streamId string) (eventv1alpha1.EventStreamChunkList, error) {
 	var eventStreamChunks eventv1alpha1.EventStreamChunkList
 
-	// TODO: Index field streamId
-	// fs, err := fields.ParseSelector(fmt.Sprintf("spec.streamId==%s", ctx.Request.NamespacedName))
-	// if err != nil {
-	// 	return eventStreamChunks, err
-	// }
+	fs, err := fields.ParseSelector(fmt.Sprintf("%s==%s", StreamIdFieldIndexKey, streamId))
+	if err != nil {
+		return eventStreamChunks, err
+	}
 
 	options := client.ListOptions{}
-	//options.FieldSelector = fs
+	options.FieldSelector = fs
 	options.Namespace = config.Operator.Namespace
 
 	if err := r.List(r.Context, &eventStreamChunks, &options); err != nil {
 		return eventv1alpha1.EventStreamChunkList{}, err
 	}
 
-	filtered := make([]eventv1alpha1.EventStreamChunk, 0)
-	for _, c := range eventStreamChunks.Items {
-		if c.Spec.StreamId == streamId {
-			filtered = append(filtered, c)
-		}
-	}
-	eventStreamChunks.Items = filtered
 	return eventStreamChunks, nil
 }
 

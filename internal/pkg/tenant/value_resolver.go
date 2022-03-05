@@ -1,13 +1,15 @@
-package core
+package tenant
 
 import (
 	"encoding/json"
 	"fmt"
 
 	"github.com/PaesslerAG/jsonpath"
+
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -16,7 +18,7 @@ type ValueResolver struct {
 	TenantName        string
 	TenantNamespace   string
 	OperatorNamespace string
-	ResourceSet       corev1alpha1.ResourceSet
+	ResourceGroups    []ResourceGroup
 	Dynamic           dynamic.Clients
 	Context           reconcile.Context
 }
@@ -44,9 +46,19 @@ func (r ValueResolver) Func(vr corev1alpha1.ValueRef) (string, error) {
 	return resolve(r, vr)
 }
 
+// Group returns a resource group matching the specified name
+func (r *ValueResolver) Group(name string) (*ResourceGroup, error) {
+	for _, group := range r.ResourceGroups {
+		if group.Name == name {
+			return &group, nil
+		}
+	}
+	return nil, fmt.Errorf("resource group %s not found", name)
+}
+
 func resolveFromBlueprint(r ValueResolver, vr corev1alpha1.ValueRef) (string, error) {
 	ref := vr.Blueprint
-	group, err := r.ResourceSet.Group(ref.ResourceGroup)
+	group, err := r.Group(ref.ResourceGroup)
 	if err != nil {
 		return "", fmt.Errorf("invalid value refrence, resource \"%s\" not found in resource set", ref.ResourceGroup)
 	}

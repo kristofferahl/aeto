@@ -11,8 +11,13 @@ func AsSha256(o interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	sum := Sha256Sum(b)
+	return sum, nil
+}
+
+func Sha256Sum(b []byte) string {
 	sum := sha256.Sum256(b)
-	return fmt.Sprintf("%x", sum), nil
+	return fmt.Sprintf("%x", sum)
 }
 
 func Sha256Equal(a, b interface{}) (bool, error) {

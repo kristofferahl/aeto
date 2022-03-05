@@ -8,6 +8,7 @@ var (
 
 // OperatorConfig contains the configuration options of the operator
 type OperatorConfig struct {
-	ReconcileInterval time.Duration
-	Namespace         string
+	ReconcileInterval     time.Duration
+	Namespace             string
+	MaxTenantResourceSets int
 }

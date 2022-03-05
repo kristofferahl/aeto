@@ -1,0 +1,203 @@
+apiVersion: core.aeto.net/v1alpha1
+kind: ResourceSet
+metadata:
+  annotations:
+    aeto.net/controlled: "true"
+    aeto.net/ttl: enabled
+  labels:
+    aeto.net/tenant: foo-rs
+    environment: dev
+  name: foo-rs
+  namespace: aeto
+spec:
+  active: false
+  groups:
+    - name: namespace
+      resources:
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            annotations:
+              aeto.net/controlled: "true"
+            labels:
+              aeto.net/blueprint: default
+              aeto.net/tenant: foo-rs
+            name: tenant-foo-rs
+      sourceTemplate: default-namespace-template
+    # - name: network_policy
+    #   resources:
+    #     - apiVersion: networking.k8s.io/v1
+    #       kind: NetworkPolicy
+    #       metadata:
+    #         annotations:
+    #           aeto.net/controlled: "true"
+    #         labels:
+    #           aeto.net/blueprint: default
+    #           aeto.net/tenant: foo-rs
+    #         name: foo-rs-allow-all-ingress
+    #         namespace: tenant-foo-rs
+    #       spec:
+    #         ingress:
+    #           - {}
+    #         podSelector: {}
+    #         policyTypes:
+    #           - Ingress
+    #   sourceTemplate: default-network-policy-template
+    # - name: limit_range
+    #   resources:
+    #     - apiVersion: v1
+    #       kind: LimitRange
+    #       metadata:
+    #         annotations:
+    #           aeto.net/controlled: "true"
+    #         labels:
+    #           aeto.net/blueprint: default
+    #           aeto.net/tenant: foo-rs
+    #         name: foo-rs-compute-limits
+    #         namespace: tenant-foo-rs
+    #       spec:
+    #         limits:
+    #           - default:
+    #               cpu: 200m
+    #               memory: 200Mi
+    #             defaultRequest:
+    #               cpu: 50m
+    #               memory: 50Mi
+    #             max:
+    #               cpu: 1000m
+    #               memory: 2000Mi
+    #             type: Container
+    #   sourceTemplate: default-limit-range-template
+    # - name: hosted_zone
+    #   resources:
+    #     - apiVersion: route53.aws.aeto.net/v1alpha1
+    #       kind: HostedZone
+    #       metadata:
+    #         annotations:
+    #           aeto.net/controlled: "true"
+    #         labels:
+    #           aeto.net/blueprint: default
+    #           aeto.net/tenant: foo-rs
+    #         name: tenant-foo-rs
+    #         namespace: aeto
+    #       spec:
+    #         connectWith:
+    #           name: aeto.dotnetmentor.se
+    #           ttl: 300
+    #         deletionPolicy: force
+    #         name: foo-rs.aeto.dotnetmentor.se
+    #         tags:
+    #           ManagedBy: aeto
+    #           Name: tenant-foo-rs
+    #   sourceTemplate: default-route53-hostedzone-template
+    # - name: certificate
+    #   resources:
+    #     - apiVersion: acm.aws.aeto.net/v1alpha1
+    #       kind: Certificate
+    #       metadata:
+    #         annotations:
+    #           aeto.net/controlled: "true"
+    #         labels:
+    #           aeto.net/blueprint: default
+    #           aeto.net/tenant: foo-rs
+    #         name: tenant-foo-rs
+    #         namespace: aeto
+    #       spec:
+    #         domainName: "*.foo-rs.aeto.dotnetmentor.se"
+    #         tags:
+    #           ManagedBy: aeto
+    #           Name: tenant-foo-rs
+    #         validation:
+    #           dns:
+    #             hostedZoneId: Z04635601UFF00VUI1M71 # this needs to be manually set when testing
+    #   sourceTemplate: default-acm-certificate-template
+    # - name: landing_page
+    #   resources:
+    #     - apiVersion: apps/v1
+    #       kind: Deployment
+    #       metadata:
+    #         annotations:
+    #           aeto.net/controlled: "true"
+    #         labels:
+    #           aeto.net/blueprint: default
+    #           aeto.net/tenant: foo-rs
+    #         name: tenant-foo-rs
+    #         namespace: tenant-foo-rs
+    #       spec:
+    #         replicas: 1
+    #         selector:
+    #           matchLabels:
+    #             app.kubernetes.io/name: go-landing
+    #         strategy:
+    #           rollingUpdate:
+    #             maxSurge: 1
+    #             maxUnavailable: 0
+    #           type: RollingUpdate
+    #         template:
+    #           metadata:
+    #             labels:
+    #               app.kubernetes.io/name: go-landing
+    #           spec:
+    #             containers:
+    #               - env:
+    #                   - name: LANDING_TITLE
+    #                     value: Tenant foo-rs
+    #                   - name: LANDING_DESCRIPTION
+    #                     value: powered by // aeto (aws-eks-tenant-operator)
+    #                 image: kristofferahl/go-landing:v1.0.0
+    #                 imagePullPolicy: Always
+    #                 name: go-landing
+    #                 ports:
+    #                   - containerPort: 9000
+    #                     name: web
+    #                     protocol: TCP
+    #                 resources:
+    #                   limits:
+    #                     cpu: 50m
+    #                     memory: 50Mi
+    #                   requests:
+    #                     cpu: 25m
+    #                     memory: 25Mi
+    #             restartPolicy: Always
+    #     - apiVersion: v1
+    #       kind: Service
+    #       metadata:
+    #         annotations:
+    #           aeto.net/controlled: "true"
+    #         labels:
+    #           aeto.net/blueprint: default
+    #           aeto.net/tenant: foo-rs
+    #         name: tenant-foo-rs
+    #         namespace: tenant-foo-rs
+    #       spec:
+    #         ports:
+    #           - name: web
+    #             port: 9000
+    #             protocol: TCP
+    #             targetPort: web
+    #         selector:
+    #           app.kubernetes.io/name: go-landing
+    #         type: ClusterIP
+    #     - apiVersion: networking.k8s.io/v1
+    #       kind: Ingress
+    #       metadata:
+    #         annotations:
+    #           aeto.net/controlled: "true"
+    #         labels:
+    #           aeto.net/blueprint: default
+    #           aeto.net/tenant: foo-rs
+    #         name: tenant-foo-rs
+    #         namespace: tenant-foo-rs
+    #       spec:
+    #         rules:
+    #           - host: www.foo-rs.aeto.dotnetmentor.se
+    #             http:
+    #               paths:
+    #                 - backend:
+    #                     service:
+    #                       name: go-landing
+    #                       port:
+    #                         name: web
+    #                   path: /
+    #                   pathType: Prefix
+    #   sourceTemplate: default-landing-page-template

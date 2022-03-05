@@ -6,33 +6,18 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+const requeueIntervalUnset = "0s"
+
 // Result gives context about the result of a reconcile operation
 type Result struct {
-	err       error
-	RequeueIn time.Duration
+	err           error
+	requeueAfter  time.Duration
+	requeueReason string
 }
 
-// ResultList contains a list of results
-type ResultList []Result
-
-// Done returns true when all result represents a successful and completed reconcile attempt
-func (rl ResultList) Done() bool {
-	for _, rr := range rl {
-		if rr.Requeue() {
-			return false
-		}
-	}
-	return true
-}
-
-// Success returns true when all result represents a successful reconcile attempt
-func (rl ResultList) Success() bool {
-	for _, rr := range rl {
-		if rr.Error() {
-			return false
-		}
-	}
-	return true
+func (rr *Result) RequeueIn(duration time.Duration, reason string) {
+	rr.requeueAfter = duration
+	rr.requeueReason = reason
 }
 
 // Error returns true when the result represents a failed reconcile attempt
@@ -40,25 +25,15 @@ func (rr Result) Error() bool {
 	return rr.err != nil
 }
 
-// Requeue returns true when there was an error or a requeue was requested
-func (rr Result) Requeue() bool {
-	return rr.Error() || rr.RequeueIn.String() != "0s"
+// RequiresRequeue returns true when there was an error or a requeue was requested
+func (rr Result) RequiresRequeue() bool {
+	return rr.Error() || rr.requeueAfter.String() != requeueIntervalUnset
 }
 
-// RequeueRequest logs and returns a controller runtime result with a request to requeue
-func (rr Result) RequeueRequest(ctx Context) (ctrl.Result, error) {
-	if rr.err == nil {
-		ctx.Log.Info("reconciliation still in progress", "requeue-in", rr.RequeueIn)
-	}
-
-	return rr.AsCtrlResultError()
-}
-
-// AsCtrlResultError converts the results and returns a controller runtime result and error
-func (rr Result) AsCtrlResultError() (ctrl.Result, error) {
-	if rr.RequeueIn.String() == "0s" {
+func (rr Result) asCtrlResultError() (ctrl.Result, error) {
+	if rr.requeueAfter.String() == requeueIntervalUnset {
 		return ctrl.Result{}, rr.err
 	}
 
-	return ctrl.Result{RequeueAfter: rr.RequeueIn}, rr.err
+	return ctrl.Result{RequeueAfter: rr.requeueAfter}, rr.err
 }

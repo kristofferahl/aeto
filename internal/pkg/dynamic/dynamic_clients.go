@@ -66,7 +66,7 @@ func (c *Clients) Apply(ctx reconcile.Context, namespacedName types.NamespacedNa
 	return nil
 }
 
-// Delete removes an unstructured object given a namespaced name and group, version, kind
+// Delete removes an object given a namespaced name and group, version, kind
 func (c *Clients) Delete(ctx reconcile.Context, namespacedName types.NamespacedName, gvk schema.GroupVersionKind) error {
 	ctx.Log.V(1).Info("deleting resource", "resource", namespacedName.String(), "gvk", gvk.String())
 
