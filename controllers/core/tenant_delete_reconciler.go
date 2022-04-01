@@ -6,6 +6,7 @@ import (
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/eventsource"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"github.com/kristofferahl/aeto/internal/pkg/tenant"
 
@@ -14,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func ReconcileDelete(ctx reconcile.Context, k8s client.Client, store eventsource.Repository, stream eventsource.Stream) reconcile.Result {
+func ReconcileDelete(ctx reconcile.Context, k8s kubernetes.Client, store eventsource.Repository, stream eventsource.Stream) reconcile.Result {
 	state := deleteState{
 		ResourceSets: make([]string, 0),
 	}
@@ -22,7 +23,7 @@ func ReconcileDelete(ctx reconcile.Context, k8s client.Client, store eventsource
 	handler := NewDeleteEventHandler(&state)
 	res := eventsource.Replay(handler, stream.Events())
 	if res.Failed() {
-		ctx.Log.Error(res.Error, "Failed to replay delete instructions from events")
+		ctx.Log.Error(res.Error, "failed to replay delete instructions from events")
 		return ctx.Error(res.Error)
 	}
 
@@ -34,24 +35,21 @@ func ReconcileDelete(ctx reconcile.Context, k8s client.Client, store eventsource
 				Name:      rs,
 			}
 			var existing corev1alpha1.ResourceSet
-			if err := k8s.Get(ctx.Context, nn, &existing); err != nil {
+			if err := k8s.Get(ctx, nn, &existing); err != nil {
 				if client.IgnoreNotFound(err) != nil {
 					// Failed to fetch
-					ctx.Log.Error(err, "failed to fetch ResourceSet", "resource-set", nn.String())
 					continue
 				} else {
 					// Already deleted, all good...
 					deletedResourceSets++
 				}
 			} else {
-				ctx.Log.V(1).Info("deleting ResourceSet", "resource-set", nn.String())
-				if err := k8s.Delete(ctx.Context, &corev1alpha1.ResourceSet{
+				if err := k8s.Delete(ctx, &corev1alpha1.ResourceSet{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: nn.Namespace,
 						Name:      nn.Name,
 					},
 				}); client.IgnoreNotFound(err) != nil {
-					ctx.Log.Error(err, "failed to delete ResourceSet", "resource-set", nn.String())
 					continue
 				}
 			}

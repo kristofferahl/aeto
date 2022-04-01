@@ -21,15 +21,15 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 )
 
 // EventStreamChunkReconciler reconciles a EventStreamChunk object
 type EventStreamChunkReconciler struct {
-	client.Client
+	kubernetes.Client
 	Scheme *runtime.Scheme
 }
 

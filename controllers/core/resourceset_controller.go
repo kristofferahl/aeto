@@ -36,7 +36,7 @@ import (
 	"github.com/PaesslerAG/jsonpath"
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/convert"
-	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
@@ -46,9 +46,8 @@ const (
 
 // ResourceSetReconciler reconciles a ResourceSet object
 type ResourceSetReconciler struct {
-	client.Client
-	Dynamic dynamic.Clients
-	Scheme  *runtime.Scheme
+	kubernetes.Client
+	Scheme *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=core.aeto.net,resources=resourcesets,verbs=get;list;watch;create;update;patch;delete
@@ -68,15 +67,10 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	rctx := reconcile.NewContext("resourceset", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
-	resourceSet, err := r.getResourceSet(rctx, req)
-	if err != nil {
-		rctx.Log.Info("ResourceSet not found")
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
+	var resourceSet corev1alpha1.ResourceSet
+	if err := r.Get(rctx, req.NamespacedName, &resourceSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("found ResourceSet")
 
 	finalizer := reconcile.NewGenericFinalizer(ResourceSetFinalizerName, func(c reconcile.Context) reconcile.Result {
 		resourceSet := resourceSet
@@ -93,7 +87,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return r.reconcileDelete(c, resourceSet)
 	})
-	res, err := reconcile.WithFinalizer(r.Client, rctx, &resourceSet, finalizer)
+	res, err := reconcile.WithFinalizer(r.Client.GetClient(), rctx, &resourceSet, finalizer)
 	if reconcile.FinalizerInProgress(res, err) {
 		return *res, err
 	}
@@ -112,14 +106,6 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	results = append(results, r.updateStatus(rctx, resourceSet, corev1alpha1.ResourceSetReconciling, results.AllDone()))
 
 	return rctx.Complete(results...)
-}
-
-func (r *ResourceSetReconciler) getResourceSet(ctx reconcile.Context, req ctrl.Request) (corev1alpha1.ResourceSet, error) {
-	var rs corev1alpha1.ResourceSet
-	if err := r.Get(ctx.Context, req.NamespacedName, &rs); err != nil {
-		return corev1alpha1.ResourceSet{}, err
-	}
-	return rs, nil
 }
 
 func (r *ResourceSetReconciler) applyResource(ctx reconcile.Context, resource corev1alpha1.EmbeddedResource) reconcile.Result {
@@ -145,7 +131,7 @@ func (r *ResourceSetReconciler) applyResource(ctx reconcile.Context, resource co
 		resourceRef.Name = name.(string)
 	}
 
-	err = r.Dynamic.Apply(ctx, resourceRef, manifest)
+	err = r.DynamicApply(ctx, resourceRef, manifest)
 	if err != nil {
 		ctx.Log.Error(err, "failed to apply resource from ResourceSet", "resource", resource)
 		return ctx.Error(err)
@@ -177,12 +163,12 @@ func (r *ResourceSetReconciler) reconcileDelete(ctx reconcile.Context, resourceS
 			Namespace: unstructured.GetNamespace(),
 		}
 
-		if err := r.Dynamic.Delete(ctx, nn, unstructured.GroupVersionKind()); err != nil {
+		if err := r.DynamicDelete(ctx, nn, unstructured.GroupVersionKind()); err != nil {
 			results = append(results, ctx.Error(err))
 			continue
 		}
 
-		unstructured, err = r.Dynamic.Get(ctx, nn, unstructured.GroupVersionKind())
+		unstructured, err = r.DynamicGet(ctx, nn, unstructured.GroupVersionKind())
 		if err != nil {
 			results = append(results, ctx.Error(err))
 			continue
@@ -214,7 +200,7 @@ func (r *ResourceSetReconciler) checkResourceReady(ctx reconcile.Context, resour
 		return false
 	}
 
-	ur, err := r.Dynamic.Get(ctx, ri.NamespacedName, ri.GroupVersionKind)
+	ur, err := r.DynamicGet(ctx, ri.NamespacedName, ri.GroupVersionKind)
 	if err != nil {
 		return false
 	}
@@ -224,13 +210,6 @@ func (r *ResourceSetReconciler) checkResourceReady(ctx reconcile.Context, resour
 		return true
 	}
 
-	ready, err := jsonpath.Get("$.ready", status)
-	ctx.Log.V(1).Info("checking status ready field", "ready", ready, "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind)
-	if err == nil {
-		rs := strings.ToLower(fmt.Sprintf("%s", ready))
-		return rs != "false"
-	}
-
 	readyCondition, err := jsonpath.Get("$.conditions[?(@.type == \"Ready\")].status", status)
 	ctx.Log.V(1).Info("checking status ready condition", "ready", readyCondition, "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind)
 	if err == nil {
@@ -238,6 +217,13 @@ func (r *ResourceSetReconciler) checkResourceReady(ctx reconcile.Context, resour
 		if len(results) == 1 {
 			return strings.ToLower(fmt.Sprintf("%s", results[0])) == "true"
 		}
+	}
+
+	ready, err := jsonpath.Get("$.ready", status)
+	ctx.Log.V(1).Info("checking status ready field", "ready", ready, "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind)
+	if err == nil {
+		rs := strings.ToLower(fmt.Sprintf("%s", ready))
+		return rs != "false"
 	}
 
 	return true
@@ -304,9 +290,7 @@ func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet 
 	}
 	apimeta.SetStatusCondition(&resourceSet.Status.Conditions, condition)
 
-	ctx.Log.V(1).Info("updating ResourceSet status")
-	if err := r.Status().Update(ctx.Context, &resourceSet); err != nil {
-		ctx.Log.Error(err, "failed to update ResourceSet status")
+	if err := r.UpdateStatus(ctx, &resourceSet); err != nil {
 		return ctx.Error(err)
 	}
 

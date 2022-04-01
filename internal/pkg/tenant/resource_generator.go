@@ -6,7 +6,7 @@ import (
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/convert"
-	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"github.com/kristofferahl/aeto/internal/pkg/template"
 	"github.com/kristofferahl/aeto/internal/pkg/util"
@@ -31,8 +31,7 @@ type ResourceGenerator struct {
 }
 
 type ResourceGeneratoreServices struct {
-	Client  client.Client
-	Dynamic dynamic.Clients
+	kubernetes.Client
 }
 
 type ResourceGenerationResult struct {
@@ -145,17 +144,15 @@ func (r *ResourceGenerator) generateFromResourceGroup(resourceGroup corev1alpha1
 	}
 	rt, err := r.getResourceTemplate(r.ctx, rtRef)
 	if err != nil {
-		r.ctx.Log.Info("ResourceTemplate not found")
 		return nil, err
 	}
-	r.ctx.Log.V(1).Info("found ResourceTemplate")
 
 	resolver := ValueResolver{
 		TenantName:        blueprint.Spec.ResourceNamePrefix + r.state.TenantName, // TODO: This should probably be done in a single place
 		TenantNamespace:   blueprint.Spec.ResourceNamePrefix + r.state.TenantName, // TODO: This should probably be done in a single place
 		OperatorNamespace: config.Operator.Namespace,
 		ResourceGroups:    resourceGroups,
-		Dynamic:           r.services.Dynamic,
+		Client:            r.services.Client,
 		Context:           r.ctx,
 	}
 
@@ -249,7 +246,7 @@ func (r *ResourceGenerator) newTemplateData(blueprint corev1alpha1.Blueprint, pa
 
 func (r *ResourceGenerator) getResourceTemplate(ctx reconcile.Context, nn types.NamespacedName) (corev1alpha1.ResourceTemplate, error) {
 	var rt corev1alpha1.ResourceTemplate
-	if err := r.services.Client.Get(ctx.Context, client.ObjectKey{
+	if err := r.services.Client.Get(ctx, client.ObjectKey{
 		Name:      nn.Name,
 		Namespace: nn.Namespace,
 	}, &rt); err != nil {

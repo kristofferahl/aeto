@@ -35,6 +35,7 @@ import (
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	awsclients "github.com/kristofferahl/aeto/internal/pkg/aws"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
@@ -44,7 +45,7 @@ const (
 
 // CertificateReconciler reconciles a Certificate object
 type CertificateReconciler struct {
-	client.Client
+	kubernetes.Client
 	Scheme *runtime.Scheme
 	AWS    awsclients.Clients
 }
@@ -66,21 +67,16 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	rctx := reconcile.NewContext("certificate", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
-	certificate, err := r.getCertificate(rctx, req)
-	if err != nil {
-		rctx.Log.Info("Certificate not found")
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
+	var certificate acmawsv1alpha1.Certificate
+	if err := r.Get(rctx, req.NamespacedName, &certificate); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("found Certificate", "certificate", certificate.NamespacedName())
 
 	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
 		certificate := certificate
 		return r.reconcileDelete(c, certificate)
 	})
-	res, err := reconcile.WithFinalizer(r.Client, rctx, &certificate, finalizer)
+	res, err := reconcile.WithFinalizer(r.Client.GetClient(), rctx, &certificate, finalizer)
 	if res != nil || err != nil {
 		rctx.Log.V(1).Info("returning finalizer results for Certificate", "certificate", certificate.NamespacedName(), "res", res, "error", err)
 		return *res, err
@@ -100,14 +96,6 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	return rctx.Complete(results...)
-}
-
-func (r *CertificateReconciler) getCertificate(ctx reconcile.Context, req ctrl.Request) (acmawsv1alpha1.Certificate, error) {
-	var cert acmawsv1alpha1.Certificate
-	if err := r.Get(ctx.Context, req.NamespacedName, &cert); err != nil {
-		return acmawsv1alpha1.Certificate{}, err
-	}
-	return cert, nil
 }
 
 func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate) (*acmtypes.CertificateDetail, reconcile.Result) {
@@ -298,7 +286,7 @@ func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certifica
 	}
 
 	ctx.Log.V(1).Info("updating Certificate status")
-	if err := r.Status().Update(ctx.Context, &certificate); err != nil {
+	if err := r.UpdateStatus(ctx, &certificate); err != nil {
 		ctx.Log.Error(err, "failed to update Certificate status")
 		return ctx.Error(err)
 	}

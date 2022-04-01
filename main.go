@@ -42,7 +42,7 @@ import (
 
 	"github.com/kristofferahl/aeto/internal/pkg/aws"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
-	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/util"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
@@ -171,16 +171,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	dynamicClients := dyn.Clients{
-		DynamicClient:   dynamicClient,
-		DiscoveryClient: discoveryClient,
-	}
+	k8sClient := kubernetes.NewClient(mgr.GetClient(), dynamicClient, discoveryClient)
 
 	if util.SliceContainsString(enabledControllers, "Tenant") {
 		if err = (&corecontrollers.TenantReconciler{
-			Client:   mgr.GetClient(),
-			Dynamic:  dynamicClients,
 			Scheme:   mgr.GetScheme(),
+			Client:   k8sClient,
 			Recorder: mgr.GetEventRecorderFor("tenant-controller"),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Tenant")
@@ -189,8 +185,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "ResourceTemplate") {
 		if err = (&corecontrollers.ResourceTemplateReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "ResourceTemplate")
 			os.Exit(1)
@@ -198,8 +194,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "Blueprint") {
 		if err = (&corecontrollers.BlueprintReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Blueprint")
 			os.Exit(1)
@@ -207,9 +203,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "ResourceSet") {
 		if err = (&corecontrollers.ResourceSetReconciler{
-			Client:  mgr.GetClient(),
-			Dynamic: dynamicClients,
-			Scheme:  mgr.GetScheme(),
+			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "ResourceSet")
 			os.Exit(1)
@@ -217,8 +212,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "HostedZone") {
 		if err = (&route53awscontrollers.HostedZoneReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 			AWS:    awsClients,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "HostedZone")
@@ -227,8 +222,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "Certificate") {
 		if err = (&acmawscontrollers.CertificateReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 			AWS:    awsClients,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Certificate")
@@ -237,8 +232,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "CertificateConnector") {
 		if err = (&acmawscontrollers.CertificateConnectorReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CertificateConnector")
 			os.Exit(1)
@@ -246,8 +241,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "EventStreamChunk") {
 		if err = (&eventcontrollers.EventStreamChunkReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "EventStreamChunk")
 			os.Exit(1)

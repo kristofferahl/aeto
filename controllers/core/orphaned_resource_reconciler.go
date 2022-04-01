@@ -1,8 +1,8 @@
 package core
 
 import (
-	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/eventsource"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"github.com/kristofferahl/aeto/internal/pkg/tenant"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func ReconcileOrphanedResources(ctx reconcile.Context, k8s dynamic.Clients, stream eventsource.Stream) reconcile.Result {
+func ReconcileOrphanedResources(ctx reconcile.Context, k8s kubernetes.Client, stream eventsource.Stream) reconcile.Result {
 	state := orhanedResourceState{
 		Active:  tenant.ResourceList{},
 		Deleted: tenant.ResourceList{},
@@ -19,7 +19,7 @@ func ReconcileOrphanedResources(ctx reconcile.Context, k8s dynamic.Clients, stre
 	handler := NewOrphanedResourceEventHandler(&state)
 	res := eventsource.Replay(handler, stream.Events())
 	if res.Failed() {
-		ctx.Log.Error(res.Error, "Failed to replay events")
+		ctx.Log.Error(res.Error, "failed to replay events")
 		return ctx.Error(res.Error)
 	}
 
@@ -32,7 +32,7 @@ func ReconcileOrphanedResources(ctx reconcile.Context, k8s dynamic.Clients, stre
 
 		// TODO: Make sure the resource is actually owned/created by the aeto tenant
 		ctx.Log.V(1).Info("making sure orphaned resource is deleted", "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind.String())
-		if err := k8s.Delete(ctx, ri.NamespacedName, ri.GroupVersionKind); client.IgnoreNotFound(err) != nil {
+		if err := k8s.DynamicDelete(ctx, ri.NamespacedName, ri.GroupVersionKind); client.IgnoreNotFound(err) != nil {
 			ctx.Log.Error(err, "failed to delete orphaned resource", "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind.String())
 		}
 	}

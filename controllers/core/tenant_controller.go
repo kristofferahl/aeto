@@ -29,8 +29,8 @@ import (
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
-	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
 	"github.com/kristofferahl/aeto/internal/pkg/eventstore"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	domain "github.com/kristofferahl/aeto/internal/pkg/tenant"
 )
@@ -45,8 +45,7 @@ var (
 
 // TenantReconciler reconciles a Tenant object
 type TenantReconciler struct {
-	client.Client
-	Dynamic  dynamic.Clients
+	kubernetes.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
@@ -68,19 +67,14 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	rctx := reconcile.NewContext("tenant", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
-	tenant, err := r.getTenant(rctx)
-	if err != nil {
-		rctx.Log.Info("Tenant not found")
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
+	var tenant corev1alpha1.Tenant
+	if err := r.Get(rctx, req.NamespacedName, &tenant); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("found Tenant")
 
 	finalizer := reconcile.NewGenericFinalizer(TenantFinalizerName, func(c reconcile.Context) reconcile.Result {
 		streamId := eventstore.StreamId(req.NamespacedName.String())
-		store := eventstore.New(r.Client, rctx.Log, rctx.Context, serializer)
+		store := eventstore.New(r.Client.GetClient(), rctx.Log, rctx.Context, serializer)
 		stream, err := store.Get(streamId)
 		if err != nil {
 			return rctx.Error(err)
@@ -89,7 +83,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			results := reconcile.ResultList{}
 
 			results = append(results, ReconcileStatus(rctx, r.Client, tenant, stream))
-			results = append(results, ReconcileOrphanedResources(rctx, r.Dynamic, stream))
+			results = append(results, ReconcileOrphanedResources(rctx, r.Client, stream))
 			results = append(results, ReconcileDelete(rctx, r.Client, store, stream))
 
 			if results.AllDone() {
@@ -110,7 +104,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 		return rctx.Done()
 	})
-	res, err := reconcile.WithFinalizer(r.Client, rctx, &tenant, finalizer)
+	res, err := reconcile.WithFinalizer(r.Client.GetClient(), rctx, &tenant, finalizer)
 	if reconcile.FinalizerInProgress(res, err) {
 		return *res, err
 	}
@@ -119,15 +113,13 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		Namespace: config.Operator.Namespace,
 		Name:      tenant.Blueprint(),
 	}
-	blueprint, err := r.getBlueprint(rctx, blueprintRef)
-	if err != nil {
-		rctx.Log.Info("Blueprint not found", "blueprint", blueprintRef.String())
+	var blueprint corev1alpha1.Blueprint
+	if err := r.Get(rctx, blueprintRef, &blueprint); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("Blueprint found", "blueprint", blueprintRef.String())
 
 	streamId := eventstore.StreamId(req.NamespacedName.String())
-	store := eventstore.New(r.Client, rctx.Log, rctx.Context, serializer)
+	store := eventstore.New(r.Client.GetClient(), rctx.Log, rctx.Context, serializer)
 	stream, err := store.Get(streamId)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -157,21 +149,18 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		t := domain.NewTenantFromEvents(stream)
 
 		results = append(results, ReconcileResourceSet(rctx, r.Client, stream))
-		results = append(results, ReconcileOrphanedResources(rctx, r.Dynamic, stream))
+		results = append(results, ReconcileOrphanedResources(rctx, r.Client, stream))
 		results = append(results, ReconcileRequeueRequest(rctx, stream))
 		results = append(results, ReconcileStatus(rctx, r.Client, tenant, stream))
 
 		t.SetDisplayName(tenant.Spec.Name)
 		t.SetBlueprintName(blueprint.Name)
 
-		generator := domain.NewResourceGenerator(rctx, domain.ResourceGeneratoreServices{
-			Client:  r.Client,
-			Dynamic: r.Dynamic,
-		})
+		generator := domain.NewResourceGenerator(rctx, domain.ResourceGeneratoreServices{Client: r.Client})
 
 		err = t.From(generator, tenant, blueprint)
 		if err != nil {
-			rctx.Log.Error(err, "failed to generate events from blueprint")
+			rctx.Log.Error(err, "failed to generate events from Blueprint")
 			results = append(results, rctx.Error(err))
 		}
 
@@ -186,17 +175,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return rctx.Complete(results...)
 }
 
-func (r *TenantReconciler) getTenant(ctx reconcile.Context) (corev1alpha1.Tenant, error) {
-	var tenant corev1alpha1.Tenant
-	if err := r.Get(ctx.Context, ctx.Request.NamespacedName, &tenant); err != nil {
-		return corev1alpha1.Tenant{}, err
-	}
-	return tenant, nil
-}
-
 func (r *TenantReconciler) getBlueprint(ctx reconcile.Context, nn types.NamespacedName) (corev1alpha1.Blueprint, error) {
 	var blueprint corev1alpha1.Blueprint
-	if err := r.Get(ctx.Context, nn, &blueprint); err != nil {
+	if err := r.Get(ctx, nn, &blueprint); err != nil {
 		return corev1alpha1.Blueprint{}, err
 	}
 	return blueprint, nil

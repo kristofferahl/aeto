@@ -21,15 +21,15 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 )
 
 // ResourceTemplateReconciler reconciles a ResourceTemplate object
 type ResourceTemplateReconciler struct {
-	client.Client
+	kubernetes.Client
 	Scheme *runtime.Scheme
 }
 

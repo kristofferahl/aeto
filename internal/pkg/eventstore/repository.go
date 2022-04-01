@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/eventsource"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 
 	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
 
@@ -67,7 +68,7 @@ func (r Repository) Save(aggregate eventsource.Aggregate) (events int, err error
 	count := len(chunk.Spec.Events)
 	if count > 0 {
 		err = r.Create(r.Context, &chunk, &client.CreateOptions{
-			FieldManager: "aeto",
+			FieldManager: kubernetes.FieldManagerName,
 		})
 		if err != nil {
 			return 0, err

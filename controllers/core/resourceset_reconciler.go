@@ -7,6 +7,7 @@ import (
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/eventsource"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"github.com/kristofferahl/aeto/internal/pkg/tenant"
 
@@ -15,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func ReconcileResourceSet(ctx reconcile.Context, k8s client.Client, stream eventsource.Stream) reconcile.Result {
+func ReconcileResourceSet(ctx reconcile.Context, k8s kubernetes.Client, stream eventsource.Stream) reconcile.Result {
 	state := resourceSetState{
 		ResourceSets: make(map[string]*corev1alpha1.ResourceSet),
 	}
@@ -23,7 +24,7 @@ func ReconcileResourceSet(ctx reconcile.Context, k8s client.Client, stream event
 	handler := NewResourceSetEventHandler(&state)
 	res := eventsource.Replay(handler, stream.Events())
 	if res.Failed() {
-		ctx.Log.Error(res.Error, "Failed to replay ResourceSets from events")
+		ctx.Log.Error(res.Error, "failed to replay ResourceSets from events")
 		return ctx.Error(res.Error)
 	}
 
@@ -55,34 +56,27 @@ func ReconcileResourceSet(ctx reconcile.Context, k8s client.Client, stream event
 	})
 
 	// TODO: Remove logging of generated ResourceSets?
-	ctx.Log.V(1).Info("Replayed events onto ResourceSets", "count", len(state.ResourceSets), "active", active, "resource-sets", sets)
+	ctx.Log.V(1).Info("replayed events onto ResourceSets", "count", len(state.ResourceSets), "active", active, "resource-sets", sets)
 
 	// TODO: Decide what the behavior should be. Do we replace all resource sets, patch or apply or ?
 	for _, rs := range sets {
 		var existing corev1alpha1.ResourceSet
-		if err := k8s.Get(ctx.Context, rs.NamespacedName(), &existing); err != nil {
+		if err := k8s.Get(ctx, rs.NamespacedName(), &existing); err != nil {
 			if client.IgnoreNotFound(err) != nil {
 				// Failed to fetch
-				ctx.Log.Error(res.Error, "failed to fetch ResourceSet", "resource-set", rs.NamespacedName().String())
 				return ctx.Error(err)
 			} else {
 				// Not found, creating
-				ctx.Log.V(1).Info("creating ResourceSet", "resource-set", rs.NamespacedName().String())
-				if err := k8s.Create(ctx.Context, rs); err != nil {
-					ctx.Log.Error(err, "failed to create ResourceSet")
+				if err := k8s.Create(ctx, rs); err != nil {
 					return ctx.Error(err)
 				}
 			}
 		} else {
 			// Updating existing
-			ctx.Log.V(1).Info("updating ResourceSet", "resource-set", existing.NamespacedName().String())
 			existing.Labels = rs.Labels
 			existing.Annotations = rs.Annotations
 			existing.Spec = rs.Spec
-			if err := k8s.Update(ctx.Context, &existing, &client.UpdateOptions{
-				FieldManager: "aeto", // TODO: Refactor use of client.Client to streamline error handling, setting of FieldManager etc
-			}); err != nil {
-				ctx.Log.Error(err, "failed to apply ResourceSet")
+			if err := k8s.Update(ctx, &existing); err != nil {
 				return ctx.Error(err)
 			}
 		}
@@ -91,7 +85,7 @@ func ReconcileResourceSet(ctx reconcile.Context, k8s client.Client, stream event
 	if len(oldSets) > 0 {
 		for _, rs := range oldSets {
 			var existing corev1alpha1.ResourceSet
-			if err := k8s.Get(ctx.Context, rs.NamespacedName(), &existing); err != nil {
+			if err := k8s.Get(ctx, rs.NamespacedName(), &existing); err != nil {
 				if client.IgnoreNotFound(err) != nil {
 					ctx.Log.Error(res.Error, "failed to fetch ResourceSet", "resource-set", rs.NamespacedName().String())
 					return ctx.Error(err)
@@ -107,7 +101,7 @@ func ReconcileResourceSet(ctx reconcile.Context, k8s client.Client, stream event
 			}
 
 			ctx.Log.V(1).Info("deleting old ResourceSet", "resource-set", rs.NamespacedName().String())
-			if err := k8s.Delete(ctx.Context, rs); err != nil {
+			if err := k8s.Delete(ctx, rs); err != nil {
 				ctx.Log.Error(err, "failed to delete old ResourceSet")
 				return ctx.Error(err)
 			}

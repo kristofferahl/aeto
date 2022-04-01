@@ -29,7 +29,7 @@ func YamlToUnstructuredSlice(source string) ([]*unstructured.Unstructured, error
 		err := yamlghodss.Unmarshal([]byte(part), &objMap)
 		if err != nil {
 			if firstErr == nil {
-				firstErr = fmt.Errorf("Failed to unmarshal manifest: %v", err)
+				firstErr = fmt.Errorf("failed to unmarshal manifest: %v", err)
 			}
 			continue
 		}
@@ -41,7 +41,7 @@ func YamlToUnstructuredSlice(source string) ([]*unstructured.Unstructured, error
 		err = yamlghodss.Unmarshal([]byte(part), &obj)
 		if err != nil {
 			if firstErr == nil {
-				firstErr = fmt.Errorf("Failed to unmarshal manifest: %v", err)
+				firstErr = fmt.Errorf("failed to unmarshal manifest: %v", err)
 			}
 			continue
 		}

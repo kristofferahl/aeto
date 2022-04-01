@@ -3,9 +3,8 @@ package acmaws
 import (
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
@@ -16,7 +15,7 @@ type Connector interface {
 }
 
 // NewConnector returns a Connector
-func NewConnector(client client.Client, cc acmawsv1alpha1.CertificateConnector) (Connector, error) {
+func NewConnector(client kubernetes.Client, cc acmawsv1alpha1.CertificateConnector) (Connector, error) {
 	if cc.Spec.Ingress != nil {
 		switch cc.Spec.Ingress.Connector {
 		case acmawsv1alpha1.ConnectorTypeAlbIngressController:

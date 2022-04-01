@@ -4,21 +4,20 @@ import (
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/eventsource"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"github.com/kristofferahl/aeto/internal/pkg/tenant"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func ReconcileStatus(ctx reconcile.Context, client client.Client, tenant corev1alpha1.Tenant, stream eventsource.Stream) reconcile.Result {
+func ReconcileStatus(ctx reconcile.Context, client kubernetes.Client, tenant corev1alpha1.Tenant, stream eventsource.Stream) reconcile.Result {
 	handler := NewTenantStatusEventHandler(&tenant.Status)
 	res := eventsource.Replay(handler, stream.Events())
 	if res.Failed() {
-		ctx.Log.Error(res.Error, "Failed to replay Tenant status from events")
+		ctx.Log.Error(res.Error, "failed to replay Tenant status from events")
 		return ctx.Error(res.Error)
 	}
 
@@ -29,13 +28,9 @@ func ReconcileStatus(ctx reconcile.Context, client client.Client, tenant corev1a
 			Name:      tenant.Status.ResourceSet,
 		}
 		var rs corev1alpha1.ResourceSet
-		err := client.Get(ctx.Context, nn, &rs)
+		err := client.Get(ctx, nn, &rs)
 		if err != nil {
-			if errors.IsNotFound(err) {
-				ctx.Log.V(1).Info("ResourceSet not found, unable to check readiniess", "rs", nn.String())
-			} else {
-				ctx.Log.Error(err, "failed to get ResourceSet", "rs", nn.String())
-			}
+			ctx.Log.V(1).Info("failed to fetch ResourceSet, unable to check readiniess")
 		} else {
 			rsReadyCondition := apimeta.FindStatusCondition(rs.Status.Conditions, ConditionTypeReady)
 			if rsReadyCondition != nil {
@@ -59,9 +54,7 @@ func ReconcileStatus(ctx reconcile.Context, client client.Client, tenant corev1a
 		}
 	}
 
-	ctx.Log.V(1).Info("updating Tenant status")
-	if err := client.Status().Update(ctx.Context, &tenant); err != nil {
-		ctx.Log.Error(err, "failed to update Tenant status")
+	if err := client.UpdateStatus(ctx, &tenant); err != nil {
 		return ctx.Error(err)
 	}
 

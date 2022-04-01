@@ -6,9 +6,9 @@ import (
 
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"github.com/kristofferahl/aeto/internal/pkg/util"
 )
@@ -26,7 +26,7 @@ const (
 
 // AlbIngressControllerConnector defines a connector of certificates for use with ALB Ingress Contoller
 type AlbIngressControllerConnector struct {
-	client.Client
+	kubernetes.Client
 	Spec acmawsv1alpha1.IngressSpec
 }
 
@@ -70,7 +70,7 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 		changed := certArnAnnotationValue != ingress.Annotations[AlbIngressControllerIngressAnnotation_CertificateArnKey]
 		if changed {
 			ctx.Log.V(1).Info("updating Ingress with new certificates", "namespace", ingress.Namespace, "name", ingress.Name, "old-arns", certArnAnnotationValue, "new-arns", ingress.Annotations[AlbIngressControllerIngressAnnotation_CertificateArnKey])
-			err := c.Update(ctx.Context, &ingress)
+			err := c.Update(ctx, &ingress)
 			if err != nil {
 				ctx.Log.Error(err, "failed to update Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
 				errors = append(errors, err)
@@ -97,7 +97,7 @@ func (c AlbIngressControllerConnector) GetIngressList(ctx reconcile.Context) ([]
 	selector := c.Spec.Selector
 
 	var list networkingv1.IngressList
-	if err := c.List(ctx.Context, &list, selector.ListOptions()); err != nil {
+	if err := c.List(ctx, &list, selector.ListOptions()); err != nil {
 		return []networkingv1.Ingress{}, ctx.Error(err)
 	}
 

@@ -33,6 +33,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53/types"
 	route53awsv1alpha1 "github.com/kristofferahl/aeto/apis/route53.aws/v1alpha1"
 	awsclients "github.com/kristofferahl/aeto/internal/pkg/aws"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
@@ -42,7 +43,7 @@ const (
 
 // HostedZoneReconciler reconciles a HostedZone object
 type HostedZoneReconciler struct {
-	client.Client
+	kubernetes.Client
 	Scheme *runtime.Scheme
 	AWS    awsclients.Clients
 }
@@ -64,21 +65,16 @@ func (r *HostedZoneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	rctx := reconcile.NewContext("hostedzone", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
-	hostedZone, err := r.getHostedZone(rctx, req)
-	if err != nil {
-		rctx.Log.Info("HostedZone not found", "hostedzone", req.NamespacedName)
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
+	var hostedZone route53awsv1alpha1.HostedZone
+	if err := r.Get(rctx, req.NamespacedName, &hostedZone); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("found HostedZone", "hostedzone", hostedZone.NamespacedName())
 
 	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
 		hostedZone := hostedZone
 		return r.reconcileDelete(c, hostedZone)
 	})
-	res, err := reconcile.WithFinalizer(r.Client, rctx, &hostedZone, finalizer)
+	res, err := reconcile.WithFinalizer(r.Client.GetClient(), rctx, &hostedZone, finalizer)
 	if res != nil || err != nil {
 		rctx.Log.V(1).Info("returning finalizer results for HostedZone", "hostedzone", hostedZone.NamespacedName(), "res", res, "error", err)
 		return *res, err
@@ -100,15 +96,6 @@ func (r *HostedZoneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	return rctx.Complete(results...)
-}
-
-func (r *HostedZoneReconciler) getHostedZone(ctx reconcile.Context, req ctrl.Request) (route53awsv1alpha1.HostedZone, error) {
-	var hostedZone route53awsv1alpha1.HostedZone
-	if err := r.Get(ctx.Context, req.NamespacedName, &hostedZone); err != nil {
-		return route53awsv1alpha1.HostedZone{}, err
-	}
-
-	return hostedZone, nil
 }
 
 func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone) (*types.HostedZone, *types.ResourceRecordSet, reconcile.Result) {
@@ -302,7 +289,7 @@ func (r *HostedZoneReconciler) reconcileStatus(ctx reconcile.Context, hostedZone
 	}
 
 	ctx.Log.V(1).Info("updating HostedZone status")
-	if err := r.Status().Update(ctx.Context, &hostedZone); err != nil {
+	if err := r.UpdateStatus(ctx, &hostedZone); err != nil {
 		ctx.Log.Error(err, "failed to update HostedZone status")
 		return ctx.Error(err)
 	}

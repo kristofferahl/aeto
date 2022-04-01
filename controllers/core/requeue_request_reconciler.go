@@ -15,7 +15,7 @@ func ReconcileRequeueRequest(ctx reconcile.Context, stream eventsource.Stream) r
 	}
 	res := eventsource.Replay(handler, stream.Events())
 	if res.Failed() {
-		ctx.Log.Error(res.Error, "Failed to replay RequeueRequest from events")
+		ctx.Log.Error(res.Error, "failed to replay RequeueRequest from events")
 		return ctx.Error(res.Error)
 	}
 

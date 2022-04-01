@@ -7,7 +7,7 @@ import (
 	"github.com/PaesslerAG/jsonpath"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
-	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -19,7 +19,7 @@ type ValueResolver struct {
 	TenantNamespace   string
 	OperatorNamespace string
 	ResourceGroups    []ResourceGroup
-	Dynamic           dynamic.Clients
+	Client            kubernetes.Client
 	Context           reconcile.Context
 }
 
@@ -90,7 +90,7 @@ func resolveFromResource(r ValueResolver, vr corev1alpha1.ValueRef) (string, err
 		resourceRef.Namespace = r.OperatorNamespace
 	}
 
-	resource, err := r.Dynamic.Get(r.Context, resourceRef, resourceGvk)
+	resource, err := r.Client.DynamicGet(r.Context, resourceRef, resourceGvk)
 	if err != nil {
 		return "", fmt.Errorf("invalid value refrence, error fetching resource \"%s\" %s: %v", resourceRef.String(), resourceGvk.String(), err)
 	}
