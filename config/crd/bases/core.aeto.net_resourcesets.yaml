@@ -17,15 +17,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.conditions[?(@.type == "Active")].status
-      name: Active
-      type: string
-    - jsonPath: .status.phase
-      name: Phase
-      type: string
-    - jsonPath: .status.conditions[?(@.type == "Ready")].message
-      name: Ready
-      type: string
     - jsonPath: .status.observedGeneration
       name: ObservedGeneration
       priority: 1
@@ -33,6 +24,15 @@ spec:
     - jsonPath: .status.resourceVersion
       name: ResourceVersion
       priority: 1
+      type: string
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .status.conditions[?(@.type == "Active")].status
+      name: Active
+      type: string
+    - jsonPath: .status.conditions[?(@.type == "Ready")].message
+      name: Ready
       type: string
     name: v1alpha1
     schema:
@@ -165,11 +165,11 @@ spec:
                 description: ObservedGeneration is the last reconciled generation.
                 format: int64
                 type: integer
-              phase:
-                description: Phase is the current lifecycle phase of the ResourceSet.
-                type: string
               resourceVersion:
                 description: ResourceVersion is the last reconciled resource version.
+                type: string
+              status:
+                description: Status is the current lifecycle phase of the ResourceSet.
                 type: string
             required:
             - conditions

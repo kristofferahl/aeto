@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"strings"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -273,21 +275,38 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 }
 
 func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, cd *acmtypes.CertificateDetail) reconcile.Result {
+	ready := metav1.ConditionFalse
+	inUse := metav1.ConditionFalse
 	if cd == nil {
 		certificate.Status.Arn = ""
-		certificate.Status.State = ""
-		certificate.Status.InUse = false
-		certificate.Status.Ready = false
+		certificate.Status.Status = ""
 	} else {
 		certificate.Status.Arn = *cd.CertificateArn
-		certificate.Status.State = string(cd.Status)
-		certificate.Status.InUse = len(cd.InUseBy) > 0
-		certificate.Status.Ready = *cd.CertificateArn != "" && cd.Status == acmtypes.CertificateStatusIssued
+		certificate.Status.Status = string(cd.Status)
+		if *cd.CertificateArn != "" && cd.Status == acmtypes.CertificateStatusIssued {
+			ready = metav1.ConditionTrue
+		}
+		if len(cd.InUseBy) > 0 {
+			inUse = metav1.ConditionTrue
+		}
 	}
 
-	ctx.Log.V(1).Info("updating Certificate status")
+	readyCondition := metav1.Condition{
+		Type:    acmawsv1alpha1.ConditionTypeReady,
+		Status:  ready,
+		Reason:  certificate.Status.Status,
+		Message: "",
+	}
+	apimeta.SetStatusCondition(&certificate.Status.Conditions, readyCondition)
+	inUseCondition := metav1.Condition{
+		Type:    acmawsv1alpha1.ConditionTypeInUse,
+		Status:  inUse,
+		Reason:  certificate.Status.Status,
+		Message: "",
+	}
+	apimeta.SetStatusCondition(&certificate.Status.Conditions, inUseCondition)
+
 	if err := r.UpdateStatus(ctx, &certificate); err != nil {
-		ctx.Log.Error(err, "failed to update Certificate status")
 		return ctx.Error(err)
 	}
 

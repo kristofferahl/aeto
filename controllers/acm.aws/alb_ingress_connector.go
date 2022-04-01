@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	networkingv1 "k8s.io/api/networking/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
@@ -34,7 +35,7 @@ type AlbIngressControllerConnector struct {
 func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) (changed bool, result reconcile.Result) {
 	certificateArns := make([]string, 0)
 	for _, certificate := range certificates {
-		if certificate.Status.Ready && certificate.Status.Arn != "" {
+		if apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeReady) && certificate.Status.Arn != "" {
 			certificateArns = append(certificateArns, certificate.Status.Arn)
 		}
 	}

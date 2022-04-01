@@ -37,8 +37,8 @@ spec:
       priority: 1
       type: string
     - description: Tenant lifecycle phase
-      jsonPath: .status.phase
-      name: Phase
+      jsonPath: .status.status
+      name: Status
       type: string
     - description: Tenant ready
       jsonPath: .status.conditions[?(@.type == "Ready")].status
@@ -154,11 +154,11 @@ spec:
               events:
                 description: Events is the number of events produced for the Tenant.
                 type: integer
-              phase:
-                description: Phase is the current lifecycle phase of the Tenant.
-                type: string
               resourceSet:
                 description: ResourceSet is the ResourceSet name used for the Tenant.
+                type: string
+              status:
+                description: Status is the current lifecycle phase of the Tenant.
                 type: string
             required:
             - conditions

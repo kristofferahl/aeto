@@ -104,7 +104,7 @@ func (h *TenantStatusEventHandler) On(e eventsource.Event) {
 			Message: "Reconciling Tenant",
 		}
 		apimeta.SetStatusCondition(&h.state.Conditions, readyCondition)
-		h.state.Phase = ConditionTypeReconciling
+		h.state.Status = ConditionTypeReconciling
 	case *tenant.BlueprintSet:
 		h.state.Blueprint = event.Name
 		break
@@ -133,7 +133,7 @@ func (h *TenantStatusEventHandler) On(e eventsource.Event) {
 			Message: "Performing cleanup",
 		}
 		apimeta.SetStatusCondition(&h.state.Conditions, terminatingCondition)
-		h.state.Phase = ConditionTypeTerminating
+		h.state.Status = ConditionTypeTerminating
 		break
 	}
 

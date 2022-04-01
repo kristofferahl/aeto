@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -267,30 +269,36 @@ func (r *HostedZoneReconciler) reconcileDelete(ctx reconcile.Context, hostedZone
 }
 
 func (r *HostedZoneReconciler) reconcileStatus(ctx reconcile.Context, hostedZone route53awsv1alpha1.HostedZone, hz *types.HostedZone, phz *types.HostedZone, phzns *types.ResourceRecordSet) reconcile.Result {
+	ready := metav1.ConditionFalse
 	if hz == nil {
 		hostedZone.Status.Id = ""
-		hostedZone.Status.State = "Creating"
+		hostedZone.Status.Status = "Creating"
 		hostedZone.Status.ConnectedTo = ""
-		hostedZone.Status.Ready = false
 	} else {
 		hostedZone.Status.Id = strings.ReplaceAll(*hz.Id, "/hostedzone/", "")
-		hostedZone.Status.State = "Created"
+		hostedZone.Status.Status = "Created"
 		hostedZone.Status.ConnectedTo = ""
-		hostedZone.Status.Ready = true
+		ready = metav1.ConditionTrue
 
 		if hostedZone.Spec.ConnectWith != nil {
 			if phz == nil || phzns == nil {
-				hostedZone.Status.Ready = false
+				ready = metav1.ConditionFalse
 			} else {
 				hostedZone.Status.ConnectedTo = strings.TrimSuffix(*phz.Name, ".")
-				hostedZone.Status.Ready = true
+				ready = metav1.ConditionTrue
 			}
 		}
 	}
 
-	ctx.Log.V(1).Info("updating HostedZone status")
+	readyCondition := metav1.Condition{
+		Type:    route53awsv1alpha1.ConditionTypeReady,
+		Status:  ready,
+		Reason:  hostedZone.Status.Status,
+		Message: "",
+	}
+	apimeta.SetStatusCondition(&hostedZone.Status.Conditions, readyCondition)
+
 	if err := r.UpdateStatus(ctx, &hostedZone); err != nil {
-		ctx.Log.Error(err, "failed to update HostedZone status")
 		return ctx.Error(err)
 	}
 

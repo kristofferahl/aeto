@@ -72,28 +72,28 @@ type ResourceSetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Phase is the current lifecycle phase of the ResourceSet.
-	Phase ResourceSetPhase `json:"phase,omitempty"`
-
-	// Conditions represent the latest available observations of the ResourceSet state.
-	Conditions []metav1.Condition `json:"conditions"`
-
 	// ObservedGeneration is the last reconciled generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// ResourceVersion is the last reconciled resource version.
 	ResourceVersion string `json:"resourceVersion,omitempty"`
+
+	// Status is the current lifecycle phase of the ResourceSet.
+	Status ResourceSetPhase `json:"status,omitempty"`
+
+	// Conditions represent the latest available observations of the ResourceSet state.
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 type ResourceSetPhase string
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Active",priority=0,type=string,JSONPath=`.status.conditions[?(@.type == "Active")].status`
-//+kubebuilder:printcolumn:name="Phase",priority=0,type=string,JSONPath=`.status.phase`
-//+kubebuilder:printcolumn:name="Ready",priority=0,type=string,JSONPath=`.status.conditions[?(@.type == "Ready")].message`
 //+kubebuilder:printcolumn:name="ObservedGeneration",priority=1,type=string,JSONPath=`.status.observedGeneration`
 //+kubebuilder:printcolumn:name="ResourceVersion",priority=1,type=string,JSONPath=`.status.resourceVersion`
+//+kubebuilder:printcolumn:name="Status",priority=0,type=string,JSONPath=`.status.status`
+//+kubebuilder:printcolumn:name="Active",priority=0,type=string,JSONPath=`.status.conditions[?(@.type == "Active")].status`
+//+kubebuilder:printcolumn:name="Ready",priority=0,type=string,JSONPath=`.status.conditions[?(@.type == "Ready")].message`
 
 // ResourceSet is the Schema for the resourcesets API
 type ResourceSet struct {

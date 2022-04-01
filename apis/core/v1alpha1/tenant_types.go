@@ -52,8 +52,8 @@ type TenantStatus struct {
 	// Events is the number of events produced for the Tenant.
 	Events int `json:"events,omitempty"`
 
-	// Phase is the current lifecycle phase of the Tenant.
-	Phase string `json:"phase,omitempty"`
+	// Status is the current lifecycle phase of the Tenant.
+	Status string `json:"status,omitempty"`
 
 	// Conditions represent the latest available observations of the Tenants state.
 	Conditions []metav1.Condition `json:"conditions"`
@@ -65,7 +65,7 @@ type TenantStatus struct {
 //+kubebuilder:printcolumn:name="Blueprint",priority=1,type="string",JSONPath=".status.blueprint",description="Blueprint name"
 //+kubebuilder:printcolumn:name="ResourceSet",priority=1,type="string",JSONPath=".status.resourceSet",description="ResourceSet name"
 //+kubebuilder:printcolumn:name="Events",priority=1,type="string",JSONPath=".status.events",description="Events produced for tenant"
-//+kubebuilder:printcolumn:name="Phase",priority=0,type="string",JSONPath=".status.phase",description="Tenant lifecycle phase"
+//+kubebuilder:printcolumn:name="Status",priority=0,type="string",JSONPath=".status.status",description="Tenant lifecycle phase"
 //+kubebuilder:printcolumn:name="Ready",priority=0,type="string",JSONPath=`.status.conditions[?(@.type == "Ready")].status`,description="Tenant ready"
 
 // Tenant is the Schema for the tenants API

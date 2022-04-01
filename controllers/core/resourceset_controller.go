@@ -78,7 +78,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			rctx.Log.Info("ResourceSet inactive, skipping cleanup before delete")
 			return c.Done()
 		}
-		if resourceSet.Status.Phase != corev1alpha1.ResourceSetTerminating {
+		if resourceSet.Status.Status != corev1alpha1.ResourceSetTerminating {
 			res := r.updateStatus(c, resourceSet, corev1alpha1.ResourceSetTerminating, false)
 			if res.Error() {
 				return res
@@ -230,12 +230,12 @@ func (r *ResourceSetReconciler) checkResourceReady(ctx reconcile.Context, resour
 }
 
 func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, phase corev1alpha1.ResourceSetPhase, resourcesApplied bool) reconcile.Result {
-	resourceSet.Status.Phase = phase
+	resourceSet.Status.Status = phase
 	resourceSet.Status.ObservedGeneration = resourceSet.GetGeneration()
 	resourceSet.Status.ResourceVersion = resourceSet.GetResourceVersion()
 
-	if !resourceSet.Spec.Active && resourceSet.Status.Phase == corev1alpha1.ResourceSetReconciling {
-		resourceSet.Status.Phase = corev1alpha1.ResourceSetPaused
+	if !resourceSet.Spec.Active && resourceSet.Status.Status == corev1alpha1.ResourceSetReconciling {
+		resourceSet.Status.Status = corev1alpha1.ResourceSetPaused
 	}
 
 	active := metav1.ConditionFalse
@@ -245,16 +245,16 @@ func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet 
 	activeCondition := metav1.Condition{
 		Type:    ConditionTypeActive,
 		Status:  active,
-		Reason:  string(resourceSet.Status.Phase),
+		Reason:  string(resourceSet.Status.Status),
 		Message: "",
 	}
 	apimeta.SetStatusCondition(&resourceSet.Status.Conditions, activeCondition)
 
-	readyReason := string(resourceSet.Status.Phase)
+	readyReason := string(resourceSet.Status.Status)
 	readyStatus := metav1.ConditionFalse
 	readyMsg := ""
 
-	switch resourceSet.Status.Phase {
+	switch resourceSet.Status.Status {
 	case corev1alpha1.ResourceSetReconciling:
 		desiredCount := len(resourceSet.Spec.Resources)
 		readyCount := 0
