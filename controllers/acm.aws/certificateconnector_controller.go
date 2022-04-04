@@ -18,8 +18,9 @@ package acmaws
 
 import (
 	"context"
-	"time"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types" // Required for Watching
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -66,35 +67,34 @@ func (r *CertificateConnectorReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	certificates, err := r.getCertificates(rctx, certificateConnector)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	connector, err := NewConnector(r.Client, certificateConnector)
+	if err != nil {
+		rctx.Log.Error(err, "failed to create connector", "certificate-connector", certificateConnector.NamespacedName())
+		return ctrl.Result{}, nil
+	}
+
 	results := reconcile.ResultList{}
 
-	certificates, listRes := r.getCertificates(rctx, certificateConnector)
-	results = append(results, listRes)
-	if results.AllSuccessful() {
-		connector, err := NewConnector(r.Client, certificateConnector)
-		if err != nil {
-			rctx.Log.Error(err, "failed to create connector", "certificate-connector", certificateConnector.NamespacedName())
-			return ctrl.Result{}, nil
-		}
+	changed, connected, connectRes := connector.Connect(rctx, certificates)
+	results = append(results, connectRes)
 
-		changed, connectRes := connector.Connect(rctx, certificates)
-		results = append(results, connectRes)
-
-		if changed {
-			statusResult := r.reconcileStatus(rctx, certificateConnector)
-			results = append(results, statusResult)
-		}
-	}
+	statusResult := r.reconcileStatus(rctx, certificateConnector, changed, connected)
+	results = append(results, statusResult)
 
 	return rctx.Complete(results...)
 }
 
-func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector) ([]acmawsv1alpha1.Certificate, reconcile.Result) {
+func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector) ([]acmawsv1alpha1.Certificate, error) {
 	selector := connector.Spec.Certificates.Selector
 
 	var list acmawsv1alpha1.CertificateList
 	if err := r.List(ctx, &list, selector.ListOptions()); err != nil {
-		return []acmawsv1alpha1.Certificate{}, ctx.Error(err)
+		return []acmawsv1alpha1.Certificate{}, err
 	}
 
 	filteredList := make([]acmawsv1alpha1.Certificate, 0)
@@ -104,18 +104,35 @@ func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, 
 		}
 	}
 
-	return filteredList, ctx.Done()
+	return filteredList, nil
 }
 
-func (r *CertificateConnectorReconciler) reconcileStatus(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector) reconcile.Result {
-	connector.Status.LastUpdated = time.Now().UTC().Format(time.UnixDate)
-
-	ctx.Log.V(1).Info("updating CertificateConnector status")
-	if err := r.UpdateStatus(ctx, &connector); err != nil {
-		ctx.Log.Error(err, "failed to update CertificateConnector status")
-		return ctx.Error(err)
+func (r *CertificateConnectorReconciler) reconcileStatus(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector, changed bool, connected bool) reconcile.Result {
+	// TODO: Fix issue with condition never updating. Should it not be a condition? What are the conditions possible for the connector?
+	status := metav1.ConditionFalse
+	reason := "CertificatesChanged"
+	if !changed {
+		if connected {
+			status = metav1.ConditionTrue
+			reason = "CertificatesConnected"
+		} else {
+			status = metav1.ConditionFalse
+			reason = "CertificatesNotConnected"
+		}
 	}
 
+	inSyncCondition := metav1.Condition{
+		Type:               acmawsv1alpha1.ConditionTypeInSync,
+		Status:             status,
+		Reason:             reason,
+		Message:            "",
+		ObservedGeneration: connector.Generation,
+	}
+	apimeta.SetStatusCondition(&connector.Status.Conditions, inSyncCondition)
+
+	if err := r.UpdateStatus(ctx, &connector); err != nil {
+		return ctx.Error(err)
+	}
 	return ctx.Done()
 }
 

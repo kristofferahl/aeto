@@ -25,8 +25,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	ConditionTypeInUse string = "InUse"
-	ConditionTypeReady string = "Ready"
+	ConditionTypeInUse  string = "InUse"
+	ConditionTypeReady  string = "Ready"
+	ConditionTypeInSync string = "InSync"
 )
 
 // CertificateSpec defines the desired state of Certificate

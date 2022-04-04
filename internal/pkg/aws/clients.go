@@ -23,6 +23,14 @@ type Clients struct {
 
 var unescaper = strings.NewReplacer(`\057`, "/", `\052`, "*")
 
+type UniqueConstraintException struct {
+	message string
+}
+
+func (e *UniqueConstraintException) Error() string {
+	return "boom"
+}
+
 // FindOneAcmCertificateByDomainName returns the first matching ACM Certificate by domain name
 func (c Clients) FindOneAcmCertificateByDomainName(ctx context.Context, domainName string) (*acmtypes.CertificateSummary, error) {
 	items, err := c.ListAcmCertificates(ctx)
@@ -44,10 +52,31 @@ func (c Clients) FindOneAcmCertificateByDomainName(ctx context.Context, domainNa
 	}
 
 	if len(matches) > 0 {
-		return nil, fmt.Errorf("multiple certificates found matching the domain name %s", domainName)
+		return nil, &UniqueConstraintException{
+			message: fmt.Sprintf("multiple certificates found matching the domain name %s", domainName),
+		}
 	}
 
 	return nil, nil
+}
+
+// FindAcmCertificatesByDomainName returns the first matching ACM Certificate by domain name
+func (c Clients) FindAcmCertificatesByDomainName(ctx context.Context, domainName string) ([]acmtypes.CertificateSummary, error) {
+	items, err := c.ListAcmCertificates(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	matches := make([]acmtypes.CertificateSummary, 0)
+
+	for _, cert := range items {
+		match := *cert.DomainName == domainName
+		if match {
+			matches = append(matches, cert)
+		}
+	}
+
+	return matches, nil
 }
 
 // GetAcmCertificateDetailsByArn returns ACM Certificate details by ARN
@@ -69,10 +98,8 @@ func (c Clients) ListAcmCertificates(ctx context.Context) ([]acmtypes.Certificat
 	paginator := acm.NewListCertificatesPaginator(c.Acm, &acm.ListCertificatesInput{
 		MaxItems: aws.Int32(5),
 	})
-	fmt.Println(fmt.Sprintf("Certificates Paginator, HasMorePages=%v", paginator.HasMorePages()))
 	for paginator.HasMorePages() {
 		output, err := paginator.NextPage(ctx)
-		fmt.Println(fmt.Sprintf("Certificates Paginator, HasMorePages=%v NextToken=%v PageItems=%d", paginator.HasMorePages(), output.NextToken, len(output.CertificateSummaryList)))
 		if err != nil {
 			return nil, err
 		}
@@ -134,6 +161,23 @@ func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, arn string, tag
 	return nil
 }
 
+// ListAcmCertificateTagsByArn lists tags for the ACM Certificate by ARN
+func (c Clients) ListAcmCertificateTagsByArn(ctx context.Context, arn string) (tags map[string]string, err error) {
+	tags = make(map[string]string)
+	tagsRes, err := c.Acm.ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{
+		CertificateArn: aws.String(arn),
+	})
+	if err != nil {
+		return tags, err
+	}
+
+	for _, tag := range tagsRes.Tags {
+		tags[*tag.Key] = *tag.Value
+	}
+
+	return tags, nil
+}
+
 // FindOneRoute53HostedZoneByName returns the first matching Route53 HostedZone by name
 func (c Clients) FindOneRoute53HostedZoneByName(ctx context.Context, name string) (*route53types.HostedZone, error) {
 	items, err := c.ListRoute53HostedZones(ctx)
@@ -155,7 +199,9 @@ func (c Clients) FindOneRoute53HostedZoneByName(ctx context.Context, name string
 	}
 
 	if len(matches) > 0 {
-		return nil, fmt.Errorf("multiple hosted zones found matching the name %s", name)
+		return nil, &UniqueConstraintException{
+			message: fmt.Sprintf("multiple hosted zones found matching the name %s", name),
+		}
 	}
 
 	return nil, nil

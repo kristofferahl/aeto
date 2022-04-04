@@ -92,21 +92,77 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if results.AllSuccessful() {
 		validationResult := r.reconcileCertificateValidation(rctx, certificate, cd)
 		results = append(results, validationResult)
-
-		statusResult := r.reconcileStatus(rctx, certificate, cd)
-		results = append(results, statusResult)
 	}
+
+	statusResult := r.reconcileStatus(rctx, certificate, cd, certificateResult.Error())
+	results = append(results, statusResult)
 
 	return rctx.Complete(results...)
 }
 
 func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate) (*acmtypes.CertificateDetail, reconcile.Result) {
-	ca := certificate.Status.Arn
+	ca := ""
+
+	certs, err := r.AWS.FindAcmCertificatesByDomainName(ctx.Context, certificate.Spec.DomainName)
+	if err != nil {
+		ctx.Log.Error(err, "failed to find AWS ACM Certificate summaries matching domain name", "domain-name", certificate.Spec.DomainName)
+		return nil, ctx.Error(err)
+	}
+
+	ownerTags := map[string]string{
+		"ManagedBy": "aeto",
+		"OwnerRef":  fmt.Sprintf("%s-%s", certificate.Kind, certificate.UID),
+	}
+
+	matchedArns := make([]string, 0)
+	for _, cs := range certs {
+		tags, err := r.AWS.ListAcmCertificateTagsByArn(ctx.Context, *cs.CertificateArn)
+		if err != nil {
+			var rnfe *acmtypes.ResourceNotFoundException
+			if errors.As(err, &rnfe) {
+				ctx.Log.Info("AWS ACM Certificate tags not found", "arn", *cs.CertificateArn)
+				return nil, ctx.RequeueIn(5, fmt.Sprintf("AWS ACM Certificate tags not found for arn %s", *cs.CertificateArn))
+			} else {
+				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate tags", "arn", *cs.CertificateArn)
+				return nil, ctx.Error(err)
+			}
+		}
+
+		tagsMatchOwner := true
+		for key, val := range ownerTags {
+			if v, ok := tags[key]; !ok || v != val {
+				tagsMatchOwner = false
+				break
+			}
+		}
+
+		if tagsMatchOwner {
+			matchedArns = append(matchedArns, *cs.CertificateArn)
+		}
+	}
+
+	if len(matchedArns) > 1 {
+		err := fmt.Errorf("multiple AWS ACM Certificates match the domain name %s and tags %v, unabled to determine certificate ownership", certificate.Spec.DomainName, ownerTags)
+		return nil, ctx.Error(err)
+	}
+
+	if len(matchedArns) == 1 {
+		ca = matchedArns[0]
+	}
+
+	// Merge owner and spec tags
+	certificateTags := make(map[string]string)
+	for key, value := range certificate.Spec.Tags {
+		certificateTags[key] = value
+	}
+	for key, value := range ownerTags {
+		certificateTags[key] = value
+	}
 
 	// No arn set, try and create it
 	if ca == "" {
 		ctx.Log.Info("creating a new AWS ACM Certificate", "domain-name", certificate.Spec.DomainName)
-		arn, err := r.newAcmCertificate(ctx, certificate)
+		arn, err := r.newAcmCertificate(ctx, certificate, certificateTags)
 		if err != nil {
 			ctx.Log.Error(err, "failed to create AWS ACM Certificate", "domain-name", certificate.Spec.DomainName)
 			return nil, ctx.Error(err)
@@ -123,13 +179,13 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 				ctx.Log.Info("AWS ACM Certificate details not found", "arn", ca)
 				return nil, ctx.RequeueIn(5, fmt.Sprintf("AWS ACM Certificate details not found for arn %s", ca))
 			} else {
-				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate", "arn", ca)
+				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate details", "arn", ca)
 				return nil, ctx.Error(err)
 			}
 		}
 
 		ctx.Log.V(1).Info("reconciling tags for AWS ACM Certificate", "domain-name", cd.DomainName, "arn", cd.CertificateArn, "tags", certificate.Spec.Tags)
-		err = r.AWS.SetAcmCertificateTagsByArn(ctx.Context, ca, certificate.Spec.Tags)
+		err = r.AWS.SetAcmCertificateTagsByArn(ctx.Context, ca, certificateTags)
 		if err != nil {
 			ctx.Log.Error(err, "failed to reconcile tags for AWS ACM Certificate", "domain-name", certificate.Spec.DomainName, "arn", *cd.CertificateArn, "tags", certificate.Spec.Tags)
 			return nil, ctx.Error(err)
@@ -274,12 +330,15 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 	return ctx.Done()
 }
 
-func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, cd *acmtypes.CertificateDetail) reconcile.Result {
+func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, cd *acmtypes.CertificateDetail, reconcileErr bool) reconcile.Result {
 	ready := metav1.ConditionFalse
 	inUse := metav1.ConditionFalse
 	if cd == nil {
 		certificate.Status.Arn = ""
-		certificate.Status.Status = ""
+		certificate.Status.Status = "Unknown"
+		if reconcileErr {
+			certificate.Status.Status = "Error"
+		}
 	} else {
 		certificate.Status.Arn = *cd.CertificateArn
 		certificate.Status.Status = string(cd.Status)
@@ -292,17 +351,19 @@ func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certifica
 	}
 
 	readyCondition := metav1.Condition{
-		Type:    acmawsv1alpha1.ConditionTypeReady,
-		Status:  ready,
-		Reason:  certificate.Status.Status,
-		Message: "",
+		Type:               acmawsv1alpha1.ConditionTypeReady,
+		Status:             ready,
+		Reason:             certificate.Status.Status,
+		Message:            "",
+		ObservedGeneration: certificate.Generation,
 	}
 	apimeta.SetStatusCondition(&certificate.Status.Conditions, readyCondition)
 	inUseCondition := metav1.Condition{
-		Type:    acmawsv1alpha1.ConditionTypeInUse,
-		Status:  inUse,
-		Reason:  certificate.Status.Status,
-		Message: "",
+		Type:               acmawsv1alpha1.ConditionTypeInUse,
+		Status:             inUse,
+		Reason:             certificate.Status.Status,
+		Message:            "",
+		ObservedGeneration: certificate.Generation,
 	}
 	apimeta.SetStatusCondition(&certificate.Status.Conditions, inUseCondition)
 
@@ -313,15 +374,15 @@ func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certifica
 	return ctx.Done()
 }
 
-func (r *CertificateReconciler) newAcmCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate) (arn string, err error) {
+func (r *CertificateReconciler) newAcmCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, certificateTags map[string]string) (arn string, err error) {
 	req := &acm.RequestCertificateInput{
 		DomainName:       aws.String(certificate.Spec.DomainName),
-		IdempotencyToken: aws.String(strings.ReplaceAll(certificate.GetName(), "-", "")),
+		IdempotencyToken: aws.String(strings.ReplaceAll(certificate.GetNamespace()+"_"+certificate.GetName(), "-", "")),
 		ValidationMethod: acmtypes.ValidationMethodDns,
 	}
 
 	tags := make([]acmtypes.Tag, 0)
-	for key, value := range certificate.Spec.Tags {
+	for key, value := range certificateTags {
 		tags = append(tags, acmtypes.Tag{
 			Key:   aws.String(key),
 			Value: aws.String(value),

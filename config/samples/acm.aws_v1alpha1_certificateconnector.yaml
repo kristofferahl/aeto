@@ -28,6 +28,7 @@ apiVersion: acm.aws.aeto.net/v1alpha1
 kind: CertificateConnector
 metadata:
   name: alb-ingress-certificateconnector
+  namespace: aeto
 spec:
   ingress:
     connector: alb.ingress.kubernetes.io

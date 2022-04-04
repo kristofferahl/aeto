@@ -32,17 +32,21 @@ type AlbIngressControllerConnector struct {
 }
 
 // Connect reconciles certificate connections for ALB Ingress Controller
-func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) (changed bool, result reconcile.Result) {
+func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) (changed bool, connected bool, result reconcile.Result) {
 	certificateArns := make([]string, 0)
+	connected = true
 	for _, certificate := range certificates {
 		if apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeReady) && certificate.Status.Arn != "" {
 			certificateArns = append(certificateArns, certificate.Status.Arn)
+			if !apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeInUse) {
+				connected = false
+			}
 		}
 	}
 
 	ingresses, ingressRes := c.GetIngressList(ctx)
 	if ingressRes.Error() {
-		return false, ingressRes
+		return false, connected, ingressRes
 	}
 
 	changes := make([]string, 0)
@@ -88,10 +92,10 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 	}
 
 	if len(errors) == 0 {
-		return len(changes) > 0, ctx.Done()
+		return len(changes) > 0, connected, ctx.Done()
 	}
 
-	return len(changes) > 0, ctx.Error(fmt.Errorf("one ore more errors occured when connecting certificates to ingresses; %v", errors))
+	return len(changes) > 0, connected, ctx.Error(fmt.Errorf("one ore more errors occured when connecting certificates to ingresses; %v", errors))
 }
 
 func (c AlbIngressControllerConnector) GetIngressList(ctx reconcile.Context) ([]networkingv1.Ingress, reconcile.Result) {

@@ -18,7 +18,6 @@ spec:
         domainName: '*.{{ .String "DomainName" }}'
         tags:
           "Name": "{{ .ResourceNamePrefix }}{{ .Key }}"
-          "ManagedBy": "aeto"
         validation:
           dns:
             hostedZoneId: '{{ .String "HostedZoneId" }}'

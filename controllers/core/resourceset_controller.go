@@ -79,7 +79,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return c.Done()
 		}
 		if resourceSet.Status.Status != corev1alpha1.ResourceSetTerminating {
-			res := r.updateStatus(c, resourceSet, corev1alpha1.ResourceSetTerminating, false)
+			res := r.reconcileStatus(c, resourceSet, corev1alpha1.ResourceSetTerminating, false)
 			if res.Error() {
 				return res
 			}
@@ -103,7 +103,7 @@ func (r *ResourceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		rctx.Log.Info("ResourceSet inactive, skipping reconcile of resources")
 	}
 
-	results = append(results, r.updateStatus(rctx, resourceSet, corev1alpha1.ResourceSetReconciling, results.AllDone()))
+	results = append(results, r.reconcileStatus(rctx, resourceSet, corev1alpha1.ResourceSetReconciling, results.AllDone()))
 
 	return rctx.Complete(results...)
 }
@@ -229,7 +229,7 @@ func (r *ResourceSetReconciler) checkResourceReady(ctx reconcile.Context, resour
 	return true
 }
 
-func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, phase corev1alpha1.ResourceSetPhase, resourcesApplied bool) reconcile.Result {
+func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, phase corev1alpha1.ResourceSetPhase, resourcesApplied bool) reconcile.Result {
 	resourceSet.Status.Status = phase
 	resourceSet.Status.ObservedGeneration = resourceSet.GetGeneration()
 	resourceSet.Status.ResourceVersion = resourceSet.GetResourceVersion()
@@ -282,13 +282,13 @@ func (r *ResourceSetReconciler) updateStatus(ctx reconcile.Context, resourceSet 
 		break
 	}
 
-	condition := metav1.Condition{
+	readyCondition := metav1.Condition{
 		Type:    ConditionTypeReady,
 		Status:  readyStatus,
 		Reason:  readyReason,
 		Message: readyMsg,
 	}
-	apimeta.SetStatusCondition(&resourceSet.Status.Conditions, condition)
+	apimeta.SetStatusCondition(&resourceSet.Status.Conditions, readyCondition)
 
 	if err := r.UpdateStatus(ctx, &resourceSet); err != nil {
 		return ctx.Error(err)

@@ -92,6 +92,7 @@ func (r *HostedZoneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		results = append(results, connectionResult)
 
 		if results.AllSuccessful() {
+			// TODO: Always update the status
 			statusRes := r.reconcileStatus(rctx, hostedZone, hz, chz, cns)
 			results = append(results, statusRes)
 		}

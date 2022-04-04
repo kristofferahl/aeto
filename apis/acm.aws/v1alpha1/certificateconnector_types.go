@@ -85,13 +85,14 @@ type CertificateConnectorStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// LastUpdated contains a timestamp for when the connector last ran to completion
-	LastUpdated string `json:"lastUpdated,omitempty"`
+	// Conditions represent the latest available observations of the ResourceSet state.
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="LastUpdated",priority=1,type=string,JSONPath=`.status.lastUpdated`
+//+kubebuilder:printcolumn:name="LastUpdated",priority=1,type="string",JSONPath=`.status.conditions[?(@.type == "InSync")].lastTransitionTime`
+//+kubebuilder:printcolumn:name="InSync",priority=1,type="string",JSONPath=`.status.conditions[?(@.type == "InSync")].status`
 
 // CertificateConnector is the Schema for the certificateconnectors API
 type CertificateConnector struct {
