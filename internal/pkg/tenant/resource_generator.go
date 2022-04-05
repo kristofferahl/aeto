@@ -65,7 +65,6 @@ func (r *ResourceGenerator) Generate(state State, blueprint corev1alpha1.Bluepri
 	errors := make([]error, 0)
 	resourceIndex := 0
 
-	// TODO: Should we break on first error? If we don't, how do we handle ordering?
 	for _, resourceGroup := range blueprint.Spec.Resources {
 		group := ResourceGroup{
 			Name:           resourceGroup.Name,

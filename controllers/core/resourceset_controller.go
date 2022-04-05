@@ -305,6 +305,10 @@ func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceS
 		return ctx.Error(err)
 	}
 
+	if readyCondition.Status != metav1.ConditionTrue {
+		return ctx.RequeueIn(15, "waiting for resources to become ready")
+	}
+
 	return ctx.Done()
 }
 

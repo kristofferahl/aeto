@@ -108,7 +108,6 @@ func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, 
 }
 
 func (r *CertificateConnectorReconciler) reconcileStatus(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector, changed bool, connected bool) reconcile.Result {
-	// TODO: Fix issue with condition never updating. Should it not be a condition? What are the conditions possible for the connector?
 	status := metav1.ConditionFalse
 	reason := "CertificatesChanged"
 	if !changed {

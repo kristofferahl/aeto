@@ -27,7 +27,6 @@ type RequeueRequestEventHandler struct {
 }
 
 func (h *RequeueRequestEventHandler) On(e eventsource.Event) {
-	// TODO: Verify we requeue on failed resource generation
 	switch e.(type) {
 	case *tenant.ResourceGenererationFailed:
 		h.state.RequeueIn(15*time.Second, "resource generation failed")

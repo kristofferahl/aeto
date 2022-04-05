@@ -63,7 +63,7 @@ func NewTenantFromEvents(stream eventsource.Stream) *TenantAggregate {
 	return a
 }
 
-func (a *TenantAggregate) Initialize(name string, namespace string) {
+func (a *TenantAggregate) Create(name string, namespace string) {
 	a.root.Apply(&TenantCreated{Name: name, Namespace: namespace})
 }
 

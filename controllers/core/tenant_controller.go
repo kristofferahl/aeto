@@ -134,8 +134,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		rctx.Log.V(1).Info("no events, creating new Tenant aggregate")
 		t := domain.NewTenant(streamId)
 
-		t.Initialize(tenant.Name, tenant.Namespace)
-
+		t.Create(tenant.Name, tenant.Namespace)
 		t.SetDisplayName(tenant.Spec.Name)
 		t.SetBlueprint(tenant, blueprint)
 

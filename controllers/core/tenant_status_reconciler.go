@@ -92,8 +92,6 @@ func NewTenantStatusEventHandler(state *corev1alpha1.TenantStatus) eventsource.E
 
 func (h *TenantStatusEventHandler) On(e eventsource.Event) {
 	// TODO: Known .status.conditions.type are: "Available", "Progressing", and "Degraded"
-	// TODO: Set tenant status to ready when there are no pending events to be replayed and the current resource set has been reconciled
-	// TODO: Use ObservedGeneration for conditions
 	switch event := e.(type) {
 	case *tenant.TenantCreated:
 		reconcilingCondition := metav1.Condition{
