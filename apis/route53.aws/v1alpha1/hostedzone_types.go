@@ -79,6 +79,8 @@ type HostedZoneStatus struct {
 
 	ConnectedTo string `json:"connectedTo,omitempty"`
 
+	RecordSets *int64 `json:"recordsets,omitempty"`
+
 	// Conditions represent the latest available observations of the ResourceSet state.
 	Conditions []metav1.Condition `json:"conditions"`
 }
@@ -89,6 +91,7 @@ type HostedZoneStatus struct {
 //+kubebuilder:printcolumn:name="Id",priority=1,type=string,JSONPath=`.status.id`
 //+kubebuilder:printcolumn:name="Status",priority=1,type=string,JSONPath=`.status.status`
 //+kubebuilder:printcolumn:name="ConnectedTo",priority=1,type=string,JSONPath=`.status.connectedTo`
+//+kubebuilder:printcolumn:name="RecordSets",priority=1,type=integer,JSONPath=`.status.recordsets`
 //+kubebuilder:printcolumn:name="Ready",priority=0,type="string",JSONPath=`.status.conditions[?(@.type == "Ready")].status`
 
 // HostedZone is the Schema for the hostedzones API

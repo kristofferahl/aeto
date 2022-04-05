@@ -32,6 +32,10 @@ spec:
       name: ConnectedTo
       priority: 1
       type: string
+    - jsonPath: .status.recordsets
+      name: RecordSets
+      priority: 1
+      type: integer
     - jsonPath: .status.conditions[?(@.type == "Ready")].status
       name: Ready
       type: string
@@ -165,6 +169,9 @@ spec:
                 type: string
               id:
                 type: string
+              recordsets:
+                format: int64
+                type: integer
               status:
                 type: string
             required:

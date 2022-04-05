@@ -39,15 +39,15 @@ spec:
               name: "$TENANT_NAME"
               namespace: "$OPERATOR_NAMESPACE"
               jsonPath: .status.id
-    # - name: landing_page
-    #   template: default-landing-page-template
-    #   parameters:
-    #     - name: IngressClass
-    #       value: traefik
-    #     - name: ExternalDnsTarget
-    #       value: loadbalancer.aeto.dotnetmentor.se
-    #     - name: IngressHost
-    #       valueFrom:
-    #         blueprint:
-    #           resourceGroup: hosted_zone
-    #           jsonPath: .resources[0].embedded.spec.name
+    - name: landing_page
+      template: default-landing-page-template
+      parameters:
+        - name: IngressClass
+          value: traefik
+        - name: ExternalDnsTarget
+          value: loadbalancer.aeto.dotnetmentor.se
+        - name: IngressHost
+          valueFrom:
+            blueprint:
+              resourceGroup: hosted_zone
+              jsonPath: .resources[0].embedded.spec.name

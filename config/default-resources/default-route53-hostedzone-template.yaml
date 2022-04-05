@@ -17,7 +17,6 @@ spec:
         name: '{{ .Key }}.{{ .String "ParentHostedZoneName" }}'
         tags:
           "Name": "{{ .ResourceNamePrefix }}{{ .Key }}"
-          "ManagedBy": "aeto"
         connectWith:
           name: '{{ .String "ParentHostedZoneName" }}'
           ttl: 300

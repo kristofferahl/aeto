@@ -54,6 +54,10 @@ func ReconcileStatus(ctx reconcile.Context, client kubernetes.Client, tenant cor
 		}
 	}
 
+	for _, condition := range tenant.Status.Conditions {
+		condition.ObservedGeneration = tenant.Generation
+	}
+
 	if err := client.UpdateStatus(ctx, &tenant); err != nil {
 		return ctx.Error(err)
 	}

@@ -207,6 +207,25 @@ func (c Clients) FindOneRoute53HostedZoneByName(ctx context.Context, name string
 	return nil, nil
 }
 
+// FindRoute53HostedZonesByName returns the matching Route53 HostedZones by name
+func (c Clients) FindRoute53HostedZonesByName(ctx context.Context, name string) ([]route53types.HostedZone, error) {
+	items, err := c.ListRoute53HostedZones(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	matches := make([]route53types.HostedZone, 0)
+
+	for _, zone := range items {
+		match := *zone.Name == name+"."
+		if match {
+			matches = append(matches, zone)
+		}
+	}
+
+	return matches, nil
+}
+
 // GetRoute53HostedZoneById returns Route53 HostedZone by ID
 func (c Clients) GetRoute53HostedZoneById(ctx context.Context, id string) (route53types.HostedZone, error) {
 	res, err := c.Route53.GetHostedZone(ctx, &route53.GetHostedZoneInput{
@@ -283,6 +302,26 @@ func (c Clients) ListRoute53HostedZones(ctx context.Context) ([]route53types.Hos
 	}
 
 	return items, nil
+}
+
+// ListRoute53HostedZoneTagsById lists tags for the Route53 HostedZone by Id
+func (c Clients) ListRoute53HostedZoneTagsById(ctx context.Context, id string) (tags map[string]string, err error) {
+	id = strings.ReplaceAll(id, "/hostedzone/", "")
+
+	tags = make(map[string]string)
+	tagsRes, err := c.Route53.ListTagsForResource(ctx, &route53.ListTagsForResourceInput{
+		ResourceType: route53types.TagResourceTypeHostedzone,
+		ResourceId:   aws.String(id),
+	})
+	if err != nil {
+		return tags, err
+	}
+
+	for _, tag := range tagsRes.ResourceTagSet.Tags {
+		tags[*tag.Key] = *tag.Value
+	}
+
+	return tags, nil
 }
 
 // ListRoute53ResourceRecordSets returns all Route53 record sets for a HostedZone

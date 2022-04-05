@@ -231,7 +231,7 @@ func (r *ResourceSetReconciler) checkResourceReady(ctx reconcile.Context, resour
 
 func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, phase corev1alpha1.ResourceSetPhase, resourcesApplied bool) reconcile.Result {
 	resourceSet.Status.Status = phase
-	resourceSet.Status.ObservedGeneration = resourceSet.GetGeneration()
+	resourceSet.Status.ObservedGeneration = resourceSet.GetGeneration() // TODO: Evaluate need for ObservedGeneration outside of Conditions
 	resourceSet.Status.ResourceVersion = resourceSet.GetResourceVersion()
 
 	if !resourceSet.Spec.Active && resourceSet.Status.Status == corev1alpha1.ResourceSetReconciling {
@@ -243,10 +243,11 @@ func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceS
 		active = metav1.ConditionTrue
 	}
 	activeCondition := metav1.Condition{
-		Type:    ConditionTypeActive,
-		Status:  active,
-		Reason:  string(resourceSet.Status.Status),
-		Message: "",
+		Type:               ConditionTypeActive,
+		Status:             active,
+		Reason:             string(resourceSet.Status.Status),
+		Message:            "",
+		ObservedGeneration: resourceSet.Generation,
 	}
 	apimeta.SetStatusCondition(&resourceSet.Status.Conditions, activeCondition)
 
@@ -283,10 +284,11 @@ func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceS
 	}
 
 	readyCondition := metav1.Condition{
-		Type:    ConditionTypeReady,
-		Status:  readyStatus,
-		Reason:  readyReason,
-		Message: readyMsg,
+		Type:               ConditionTypeReady,
+		Status:             readyStatus,
+		Reason:             readyReason,
+		Message:            readyMsg,
+		ObservedGeneration: resourceSet.Generation,
 	}
 	apimeta.SetStatusCondition(&resourceSet.Status.Conditions, readyCondition)
 
