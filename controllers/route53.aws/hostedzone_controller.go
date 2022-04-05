@@ -179,18 +179,6 @@ func (r *HostedZoneReconciler) reconcileHostedZone(ctx reconcile.Context, hosted
 
 	// Id set, get hosted zone and set tags
 	if hz != nil {
-		// hz, err := r.AWS.GetRoute53HostedZoneById(ctx.Context, id)
-		// if err != nil {
-		// 	var nshz *types.NoSuchHostedZone
-		// 	if errors.As(err, &nshz) {
-		// 		ctx.Log.Info("AWS Route53 HostedZone not found", "id", id)
-		// 		return nil, nil, ctx.RequeueIn(5, fmt.Sprintf("AWS Route53 HostedZone with id %s was not found", id))
-		// 	}
-
-		// 	ctx.Log.Error(err, "failed to fetch AWS Route53 HostedZone", "id", id)
-		// 	return nil, nil, ctx.Error(err)
-		// }
-
 		ctx.Log.V(1).Info("reconciling tags for AWS Route53 HostedZone", "name", *hz.Name, "id", *hz.Id)
 		err = r.AWS.SetRoute53HostedZoneTagsById(ctx.Context, *hz.Id, hostedZoneTags)
 		if err != nil {

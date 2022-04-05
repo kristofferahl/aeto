@@ -11,10 +11,11 @@ func Events() []eventsource.Event {
 		&BlueprintSet{},
 		&LabelsChanged{},
 		&AnnotationsChanged{},
+		&ResourceNamespaceNameChanged{},
 		&ResourceGenererationFailed{},
 		&ResourceGenererationSuccessful{},
 		&ResourceSetVersionChanged{},
-		&ResourceSetNameChanged{},
+		&ResourceSetCreated{},
 		&ResourceAdded{},
 		&ResourceUpdated{},
 		&ResourceRemoved{},
@@ -26,7 +27,11 @@ func Events() []eventsource.Event {
 
 type TenantCreated struct {
 	eventsource.EventModel
-	Name      string `json:"name"`
+
+	// Name is the name of the Tenant.
+	Name string `json:"name"`
+
+	// Namespace is the namespace where the Tenant was created.
 	Namespace string `json:"namespace"`
 }
 
@@ -37,7 +42,8 @@ type TenantDisplayNameSet struct {
 
 type BlueprintSet struct {
 	eventsource.EventModel
-	Name string `json:"name"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 type LabelsChanged struct {
@@ -48,6 +54,12 @@ type LabelsChanged struct {
 type AnnotationsChanged struct {
 	eventsource.EventModel
 	Annotations map[string]string `json:"annotations"`
+}
+
+type ResourceNamespaceNameChanged struct {
+	eventsource.EventModel
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 type ResourceGenererationFailed struct {
@@ -65,9 +77,10 @@ type ResourceSetVersionChanged struct {
 	Version int `json:"version"`
 }
 
-type ResourceSetNameChanged struct {
+type ResourceSetCreated struct {
 	eventsource.EventModel
-	Name string `json:"name"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 type ResourceAdded struct {

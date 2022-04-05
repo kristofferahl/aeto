@@ -148,8 +148,8 @@ func (r *ResourceGenerator) generateFromResourceGroup(resourceGroup corev1alpha1
 	}
 
 	resolver := ValueResolver{
-		TenantName:        blueprint.Spec.ResourceNamePrefix + r.state.TenantName, // TODO: This should probably be done in a single place
-		TenantNamespace:   blueprint.Spec.ResourceNamePrefix + r.state.TenantName, // TODO: This should probably be done in a single place
+		TenantName:        r.state.TenantPrefixedName,
+		TenantNamespace:   r.state.TenantPrefixedNamespace,
 		OperatorNamespace: config.Operator.Namespace,
 		ResourceGroups:    resourceGroups,
 		Client:            r.services.Client,
@@ -197,7 +197,7 @@ func (r *ResourceGenerator) generateFromResourceGroup(resourceGroup corev1alpha1
 		case corev1alpha1.ResourceNamespaceOperator:
 			resourceNamespace = config.Operator.Namespace
 		case corev1alpha1.ResourceNamespaceTenant:
-			resourceNamespace = blueprint.Spec.ResourceNamePrefix + r.state.TenantName
+			resourceNamespace = r.state.TenantPrefixedNamespace
 		case corev1alpha1.ResourceNamespaceKeep:
 			resourceNamespace = resource.GetNamespace()
 			if resource.GroupVersionKind() == namespaceGVK {
@@ -207,7 +207,7 @@ func (r *ResourceGenerator) generateFromResourceGroup(resourceGroup corev1alpha1
 
 		switch rt.Spec.Rules.Name {
 		case corev1alpha1.ResourceNameTenant:
-			resourceName = blueprint.Spec.ResourceNamePrefix + r.state.TenantName
+			resourceName = r.state.TenantPrefixedName
 		case corev1alpha1.ResourceNameKeep:
 			resourceName = resource.GetName()
 		}
@@ -231,11 +231,11 @@ func (r *ResourceGenerator) generateFromResourceGroup(resourceGroup corev1alpha1
 
 func (r *ResourceGenerator) newTemplateData(blueprint corev1alpha1.Blueprint, parameters []*corev1alpha1.Parameter) template.Data {
 	return template.Data{
-		Key:                r.state.TenantName,
-		ResourceNamePrefix: blueprint.Spec.ResourceNamePrefix,
-		Name:               r.state.TenantDisplayName,
+		Name:         r.state.TenantName,
+		PrefixedName: r.state.TenantPrefixedName,
+		DisplayName:  r.state.TenantDisplayName,
 		Namespaces: template.Namespaces{
-			Tenant:   blueprint.Spec.ResourceNamePrefix + r.state.TenantName,
+			Tenant:   r.state.TenantPrefixedNamespace,
 			Operator: config.Operator.Namespace,
 		},
 		Labels:      r.state.Labels,

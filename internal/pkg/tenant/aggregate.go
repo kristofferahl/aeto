@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/eventsource"
 )
 
@@ -18,17 +19,22 @@ type State struct {
 	TenantNamespace   string
 	TenantDisplayName string
 
-	BlueprintName string
+	BlueprintName      string
+	BlueprintNamespace string
 
 	Labels      map[string]string
 	Annotations map[string]string
 
+	TenantPrefixedName      string
+	TenantPrefixedNamespace string
+
 	ResourceGenerationFailed bool
 	ResourceGenerationSum    string
 
-	ResourceSetVersion int
-	ResourceSetName    string
-	Resources          ResourceList
+	ResourceSetVersion   int
+	ResourceSetName      string
+	ResourceSetNamespace string
+	Resources            ResourceList
 
 	ResourceSetActive map[string]bool
 
@@ -67,15 +73,20 @@ func (a *TenantAggregate) SetDisplayName(name string) {
 	}
 }
 
-func (a *TenantAggregate) SetBlueprintName(name string) {
-	if a.state.BlueprintName != name {
-		a.root.Apply(&BlueprintSet{Name: name})
+func (a *TenantAggregate) SetBlueprint(tenant v1alpha1.Tenant, blueprint v1alpha1.Blueprint) {
+	if a.state.BlueprintName != blueprint.Name || a.state.BlueprintNamespace != blueprint.Namespace {
+		a.root.Apply(&BlueprintSet{Name: blueprint.Name, Namespace: blueprint.Namespace})
 	}
-}
 
-func (a *TenantAggregate) From(g ResourceGenerator, t v1alpha1.Tenant, b v1alpha1.Blueprint) error {
-	commonLables := b.CommonLabels(t)
-	commonAnnotations := b.CommonAnnotations(t)
+	name := blueprint.Spec.ResourceNamePrefix + a.state.TenantName
+	namespace := blueprint.Spec.ResourceNamePrefix + a.state.TenantName
+	if a.state.TenantPrefixedName != name || a.state.TenantPrefixedNamespace != namespace {
+		a.root.Apply(&ResourceNamespaceNameChanged{Name: name, Namespace: namespace})
+	}
+
+	commonLables := blueprint.CommonLabels(tenant)
+	commonAnnotations := blueprint.CommonAnnotations(tenant)
+
 	if !reflect.DeepEqual(a.state.Labels, commonLables) {
 		a.root.Apply(&LabelsChanged{Labels: commonLables})
 	}
@@ -83,7 +94,9 @@ func (a *TenantAggregate) From(g ResourceGenerator, t v1alpha1.Tenant, b v1alpha
 	if !reflect.DeepEqual(a.state.Annotations, commonAnnotations) {
 		a.root.Apply(&AnnotationsChanged{Annotations: commonAnnotations})
 	}
+}
 
+func (a *TenantAggregate) GenerateResources(g ResourceGenerator, t v1alpha1.Tenant, b v1alpha1.Blueprint) error {
 	res, err := g.Generate(a.state, b)
 	resourcesChanged := a.state.ResourceGenerationSum != res.Sum
 	if err != nil {
@@ -99,13 +112,9 @@ func (a *TenantAggregate) From(g ResourceGenerator, t v1alpha1.Tenant, b v1alpha
 		}
 	}
 
-	if a.state.BlueprintName != b.Name {
-		a.root.Apply(&BlueprintSet{Name: b.Name})
-	}
-
 	if resourcesChanged {
 		a.root.Apply(&ResourceSetVersionChanged{Version: a.state.ResourceSetVersion + 1})
-		a.root.Apply(&ResourceSetNameChanged{Name: fmt.Sprintf("rs-%s-%06d", a.state.TenantName, a.state.ResourceSetVersion)})
+		a.root.Apply(&ResourceSetCreated{Name: fmt.Sprintf("rs-%s-%06d", a.state.TenantName, a.state.ResourceSetVersion), Namespace: config.Operator.Namespace})
 	}
 
 	for _, rg := range res.ResourceGroups {
@@ -183,12 +192,17 @@ func (s *State) On(e eventsource.Event) {
 		break
 	case *BlueprintSet:
 		s.BlueprintName = event.Name
+		s.BlueprintNamespace = event.Namespace
 		break
 	case *LabelsChanged:
 		s.Labels = event.Labels
 		break
 	case *AnnotationsChanged:
 		s.Annotations = event.Annotations
+		break
+	case *ResourceNamespaceNameChanged:
+		s.TenantPrefixedName = event.Name
+		s.TenantPrefixedNamespace = event.Namespace
 		break
 	case *ResourceGenererationFailed:
 		s.ResourceGenerationFailed = true
@@ -201,8 +215,9 @@ func (s *State) On(e eventsource.Event) {
 	case *ResourceSetVersionChanged:
 		s.ResourceSetVersion = event.Version
 		break
-	case *ResourceSetNameChanged:
+	case *ResourceSetCreated:
 		s.ResourceSetName = event.Name
+		s.ResourceSetNamespace = event.Namespace
 		break
 	case *ResourceAdded:
 		s.Resources = append(s.Resources, event.Resource)

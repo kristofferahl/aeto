@@ -193,40 +193,44 @@ func (r *ResourceSetReconciler) reconcileDelete(ctx reconcile.Context, resourceS
 	return ctx.Done()
 }
 
-func (r *ResourceSetReconciler) checkResourceReady(ctx reconcile.Context, resource corev1alpha1.EmbeddedResource) bool {
+func (r *ResourceSetReconciler) checkResourceReady(ctx reconcile.Context, resource corev1alpha1.EmbeddedResource) (checked bool, ready bool) {
 	ri, err := convert.RawExtensionToResourceIdentifier(resource.RawExtension)
 	if err != nil {
 		ctx.Log.Error(err, "failed to convert resource to resource identifier")
-		return false
+		return false, false
 	}
 
 	ur, err := r.DynamicGet(ctx, ri.NamespacedName, ri.GroupVersionKind)
 	if err != nil {
-		return false
+		return false, false
 	}
 
 	status, found, err := unstructured.NestedMap(ur.Object, "status")
 	if err != nil || !found {
-		return true
+		return false, false
 	}
 
 	readyCondition, err := jsonpath.Get("$.conditions[?(@.type == \"Ready\")].status", status)
-	ctx.Log.V(1).Info("checking status ready condition", "ready", readyCondition, "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind)
 	if err == nil {
 		results := readyCondition.([]interface{})
 		if len(results) == 1 {
-			return strings.ToLower(fmt.Sprintf("%s", results[0])) == "true"
+			ready := strings.ToLower(fmt.Sprintf("%s", results[0])) == "true"
+			ctx.Log.V(1).Info("checking resource readiness using ready condition", "ready", ready, "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind)
+			return true, ready
 		}
 	}
 
-	ready, err := jsonpath.Get("$.ready", status)
-	ctx.Log.V(1).Info("checking status ready field", "ready", ready, "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind)
+	readyField, err := jsonpath.Get("$.ready", status)
 	if err == nil {
-		rs := strings.ToLower(fmt.Sprintf("%s", ready))
-		return rs != "false"
+		readyStatus := strings.ToLower(fmt.Sprintf("%s", readyField))
+		if readyStatus == "true" || readyStatus == "false" {
+			ready := readyStatus == "true"
+			ctx.Log.V(1).Info("checking resource readiness using ready field", "ready", ready, "nn", ri.NamespacedName.String(), "gvk", ri.GroupVersionKind)
+			return true, ready
+		}
 	}
 
-	return true
+	return false, false
 }
 
 func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet, phase corev1alpha1.ResourceSetPhase, resourcesApplied bool) reconcile.Result {
@@ -257,13 +261,18 @@ func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceS
 
 	switch resourceSet.Status.Status {
 	case corev1alpha1.ResourceSetReconciling:
-		desiredCount := len(resourceSet.Spec.Resources)
+		totalCount := len(resourceSet.Spec.Resources)
+		uncheckedCount := 0
 		readyCount := 0
 		for _, resource := range resourceSet.Spec.Resources {
-			if ready := r.checkResourceReady(ctx, resource.Embedded); ready {
+			checked, ready := r.checkResourceReady(ctx, resource.Embedded)
+			if !checked {
+				uncheckedCount++
+			} else if checked && ready {
 				readyCount++
 			}
 		}
+		desiredCount := totalCount - uncheckedCount
 		ready := readyCount == desiredCount
 		readyStatus = metav1.ConditionFalse
 		if resourcesApplied && !ready {
@@ -273,7 +282,7 @@ func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceS
 			readyStatus = metav1.ConditionTrue
 			readyReason = "ResourcesReady"
 		}
-		readyMsg = fmt.Sprintf("%d/%d", readyCount, desiredCount)
+		readyMsg = fmt.Sprintf("%d/%d (%d)", readyCount, desiredCount, totalCount)
 		break
 	case corev1alpha1.ResourceSetPaused:
 		readyStatus = metav1.ConditionUnknown

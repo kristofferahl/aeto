@@ -21,6 +21,10 @@ spec:
       jsonPath: .spec.name
       name: Tenant
       type: string
+    - description: Tenant namespace
+      jsonPath: .status.namespace
+      name: Namespace
+      type: string
     - description: Blueprint name
       jsonPath: .status.blueprint
       name: Blueprint
@@ -78,7 +82,8 @@ spec:
             description: TenantStatus defines the observed state of Tenant
             properties:
               blueprint:
-                description: Blueprint is the Blueprint used for the Tenant.
+                description: Blueprint is the namespace/name of the Blueprint in use
+                  by the Tenant.
                 type: string
               conditions:
                 description: Conditions represent the latest available observations
@@ -154,8 +159,12 @@ spec:
               events:
                 description: Events is the number of events produced for the Tenant.
                 type: integer
+              namespace:
+                description: Namespace is the namespace for the Tenant.
+                type: string
               resourceSet:
-                description: ResourceSet is the ResourceSet name used for the Tenant.
+                description: ResourceSet is the the namespace/name of the ResourceSet
+                  in use by the Tenant.
                 type: string
               status:
                 description: Status is the current lifecycle phase of the Tenant.

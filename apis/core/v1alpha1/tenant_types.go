@@ -43,10 +43,13 @@ type TenantStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Blueprint is the Blueprint used for the Tenant.
+	// Namespace is the namespace for the Tenant.
+	Namespace string `json:"namespace,omitempty"`
+
+	// Blueprint is the namespace/name of the Blueprint in use by the Tenant.
 	Blueprint string `json:"blueprint,omitempty"`
 
-	// ResourceSet is the ResourceSet name used for the Tenant.
+	// ResourceSet is the the namespace/name of the ResourceSet in use by the Tenant.
 	ResourceSet string `json:"resourceSet,omitempty"`
 
 	// Events is the number of events produced for the Tenant.
@@ -62,6 +65,7 @@ type TenantStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="Tenant",priority=0,type="string",JSONPath=".spec.name",description="The display name of the tenant"
+//+kubebuilder:printcolumn:name="Namespace",priority=0,type="string",JSONPath=".status.namespace",description="Tenant namespace"
 //+kubebuilder:printcolumn:name="Blueprint",priority=1,type="string",JSONPath=".status.blueprint",description="Blueprint name"
 //+kubebuilder:printcolumn:name="ResourceSet",priority=1,type="string",JSONPath=".status.resourceSet",description="ResourceSet name"
 //+kubebuilder:printcolumn:name="Events",priority=1,type="string",JSONPath=".status.events",description="Events produced for tenant"

@@ -150,7 +150,7 @@ func (h *ResourceSetEventHandler) On(e eventsource.Event) {
 	case *tenant.AnnotationsChanged:
 		h.state.Annotations = event.Annotations
 		break
-	case *tenant.ResourceSetNameChanged:
+	case *tenant.ResourceSetCreated:
 		current := h.state.ResourceSets[h.state.Current]
 		if current != nil {
 			h.state.ResourceSets[event.Name] = current.DeepCopy()
@@ -161,7 +161,7 @@ func (h *ResourceSetEventHandler) On(e eventsource.Event) {
 		h.onCurrentResourceSet(func(rs *corev1alpha1.ResourceSet) {
 			rs.ObjectMeta = metav1.ObjectMeta{
 				Name:        event.Name,
-				Namespace:   config.Operator.Namespace,
+				Namespace:   event.Namespace,
 				Labels:      h.state.Labels,
 				Annotations: h.state.Annotations,
 			}

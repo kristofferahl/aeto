@@ -37,7 +37,7 @@ spec:
                 imagePullPolicy: Always
                 env:
                   - name: LANDING_TITLE
-                    value: "{{ .Name }}"
+                    value: "{{ .DisplayName }}"
                   - name: LANDING_DESCRIPTION
                     value: "powered by // aeto (aws-eks-tenant-operator)"
                 ports:

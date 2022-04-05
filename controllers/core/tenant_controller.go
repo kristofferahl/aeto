@@ -135,8 +135,9 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		t := domain.NewTenant(streamId)
 
 		t.Initialize(tenant.Name, tenant.Namespace)
+
 		t.SetDisplayName(tenant.Spec.Name)
-		t.SetBlueprintName(blueprint.Name)
+		t.SetBlueprint(tenant, blueprint)
 
 		events, err := store.Save(t)
 		if err != nil {
@@ -154,11 +155,11 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		results = append(results, ReconcileStatus(rctx, r.Client, tenant, stream))
 
 		t.SetDisplayName(tenant.Spec.Name)
-		t.SetBlueprintName(blueprint.Name)
+		t.SetBlueprint(tenant, blueprint)
 
 		generator := domain.NewResourceGenerator(rctx, domain.ResourceGeneratoreServices{Client: r.Client})
 
-		err = t.From(generator, tenant, blueprint)
+		err = t.GenerateResources(generator, tenant, blueprint)
 		if err != nil {
 			rctx.Log.Error(err, "failed to generate events from Blueprint")
 			results = append(results, rctx.Error(err))

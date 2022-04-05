@@ -1,8 +1,9 @@
 package core
 
 import (
+	"strings"
+
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
-	"github.com/kristofferahl/aeto/internal/pkg/config"
 	"github.com/kristofferahl/aeto/internal/pkg/eventsource"
 	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
@@ -23,9 +24,10 @@ func ReconcileStatus(ctx reconcile.Context, client kubernetes.Client, tenant cor
 
 	rsReady := false
 	if tenant.Status.ResourceSet != "" {
+		nnParts := strings.Split(tenant.Status.ResourceSet, string(types.Separator))
 		nn := types.NamespacedName{
-			Namespace: config.Operator.Namespace,
-			Name:      tenant.Status.ResourceSet,
+			Namespace: nnParts[0],
+			Name:      nnParts[1],
 		}
 		var rs corev1alpha1.ResourceSet
 		err := client.Get(ctx, nn, &rs)
@@ -109,11 +111,20 @@ func (h *TenantStatusEventHandler) On(e eventsource.Event) {
 		}
 		apimeta.SetStatusCondition(&h.state.Conditions, readyCondition)
 		h.state.Status = ConditionTypeReconciling
-	case *tenant.BlueprintSet:
-		h.state.Blueprint = event.Name
+	case *tenant.ResourceNamespaceNameChanged:
+		h.state.Namespace = event.Namespace
 		break
-	case *tenant.ResourceSetNameChanged:
-		h.state.ResourceSet = event.Name
+	case *tenant.BlueprintSet:
+		h.state.Blueprint = types.NamespacedName{
+			Namespace: event.Namespace,
+			Name:      event.Name,
+		}.String()
+		break
+	case *tenant.ResourceSetCreated:
+		h.state.ResourceSet = types.NamespacedName{
+			Namespace: event.Namespace,
+			Name:      event.Name,
+		}.String()
 		break
 	case *tenant.TenantDeleted:
 		reconcilingCondition := metav1.Condition{

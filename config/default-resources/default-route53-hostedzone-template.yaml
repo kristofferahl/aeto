@@ -14,9 +14,9 @@ spec:
       metadata:
         name: "injected"
       spec:
-        name: '{{ .Key }}.{{ .String "ParentHostedZoneName" }}'
+        name: '{{ .Name }}.{{ .String "ParentHostedZoneName" }}'
         tags:
-          "Name": "{{ .ResourceNamePrefix }}{{ .Key }}"
+          "Name": "{{ .PrefixedName }}"
         connectWith:
           name: '{{ .String "ParentHostedZoneName" }}'
           ttl: 300

@@ -85,7 +85,7 @@ func NewDeleteEventHandler(state *deleteState) eventsource.EventHandler {
 
 func (h *DeleteEventHandler) On(e eventsource.Event) {
 	switch event := e.(type) {
-	case *tenant.ResourceSetNameChanged:
+	case *tenant.ResourceSetCreated:
 		h.state.ResourceSets = append(h.state.ResourceSets, event.Name)
 		break
 	}
