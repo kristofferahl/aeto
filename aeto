@@ -60,6 +60,20 @@ print() {
   echo
 }
 
+events() {
+  echo
+  echo 'EventStreamChunks:'
+  kubectl -n aeto get eventstreamchunk -o wide
+
+  echo
+  echo 'Event summary:'
+  kubectl -n aeto get eventstreamchunk -o json | jq -r '.items[].spec.events[].raw' | jq -c -r .type
+
+  echo
+  echo 'Event details:'
+  kubectl -n aeto get eventstreamchunk -o json | jq -r '.items[].spec.events[].raw' | jq -c .
+}
+
 apply() {
   kubectl apply -k config/default-resources/
   kubectl apply -k config/samples/
@@ -71,6 +85,8 @@ apply() {
     kubectl -n default get tenant example -o wide
     echo
     kubectl -n aeto get resourcesets -o wide
+    echo
+    kubectl -n aeto get certificateconnector -o wide
     sleep 3
   done
 }
@@ -120,6 +136,7 @@ main() {
   destroy) destroy ;;
   cleanup) cleanup ;;
   watch) watch ;;
+  events) events ;;
   *) print ;;
   esac
 }
