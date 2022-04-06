@@ -35,7 +35,7 @@ func WithFinalizer(client client.Client, ctx Context, obj client.Object, finaliz
 
 			result := finalizer.Handler()(ctx)
 			if result.RequiresRequeue() {
-				ctx.Log.V(1).Info(fmt.Sprintf("finalizer requires requeue for %s", objTypeName), "result", result, "finalizer", finalizer.Name())
+				ctx.Log.V(1).Info(fmt.Sprintf("finalizer requires requeue for %s", objTypeName), "reason", result.requeueReason, "result", result, "finalizer", finalizer.Name())
 				res, err := result.asCtrlResultError()
 				return &res, err
 			}

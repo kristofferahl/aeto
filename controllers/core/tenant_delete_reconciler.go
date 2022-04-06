@@ -17,6 +17,7 @@ import (
 
 func ReconcileDelete(ctx reconcile.Context, k8s kubernetes.Client, store eventsource.Repository, stream eventsource.Stream) reconcile.Result {
 	state := deleteState{
+		Deleted:      false,
 		ResourceSets: make([]string, 0),
 	}
 
@@ -25,6 +26,10 @@ func ReconcileDelete(ctx reconcile.Context, k8s kubernetes.Client, store eventso
 	if res.Failed() {
 		ctx.Log.Error(res.Error, "failed to replay delete instructions from events")
 		return ctx.Error(res.Error)
+	}
+
+	if !state.Deleted {
+		return ctx.RequeueIn(5, "waiting for delete event to appear")
 	}
 
 	deletedResourceSets := 0
@@ -74,6 +79,7 @@ type DeleteEventHandler struct {
 }
 
 type deleteState struct {
+	Deleted      bool
 	ResourceSets []string
 }
 
@@ -87,6 +93,9 @@ func (h *DeleteEventHandler) On(e eventsource.Event) {
 	switch event := e.(type) {
 	case *tenant.ResourceSetCreated:
 		h.state.ResourceSets = append(h.state.ResourceSets, event.Name)
+		break
+	case *tenant.TenantDeleted:
+		h.state.Deleted = true
 		break
 	}
 }
