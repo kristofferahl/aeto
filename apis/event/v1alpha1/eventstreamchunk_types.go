@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"sort"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,7 +31,13 @@ type EventStreamChunkSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// StreamId defines the ID of the stream
-	StreamId string `json:"streamId"`
+	StreamId string `json:"id"`
+
+	// StreamVersion is the version of the stream at the point when it chunk was created
+	StreamVersion int64 `json:"version"`
+
+	// Timestamp is point in time when the chunk was created
+	Timestamp string `json:"ts"`
 
 	// Events holds the events of the stream chunk
 	Events []EventRecord `json:"events"`
@@ -49,6 +57,9 @@ type EventStreamChunkStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Id",priority=0,type=string,JSONPath=`.spec.id`
+//+kubebuilder:printcolumn:name="Version",priority=0,type=string,JSONPath=`.spec.version`
+//+kubebuilder:printcolumn:name="Timestamp",priority=1,type=string,JSONPath=`.spec.ts`
 
 // EventStreamChunk is the Schema for the eventstreamchunks API
 type EventStreamChunk struct {
@@ -66,6 +77,13 @@ type EventStreamChunkList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []EventStreamChunk `json:"items"`
+}
+
+func (l EventStreamChunkList) Sort() []EventStreamChunk {
+	sort.Slice(l.Items[:], func(i, j int) bool {
+		return l.Items[i].Spec.StreamVersion < l.Items[j].Spec.StreamVersion
+	})
+	return l.Items
 }
 
 func init() {

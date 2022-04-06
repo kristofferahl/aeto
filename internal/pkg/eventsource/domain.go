@@ -34,6 +34,7 @@ func (a *AggregateRoot) LoadFromHistoricalEvents(stream Stream) *AggregateRoot {
 	for _, e := range stream.Events() {
 		a.applyToInternalState(e)
 	}
+	a.WithVersion(stream.Version())
 	return a
 }
 
@@ -46,7 +47,8 @@ func (a *AggregateRoot) Version() int64 {
 }
 
 func (a *AggregateRoot) Apply(e Event) {
-	e.setEventSequence(a.lastEventSequence + 1)
+	e.setTimestamp()
+	e.setSequence(a.lastEventSequence + 1)
 	a.applyToInternalState(e)
 	a.uncommitted = append(a.uncommitted, e)
 }
@@ -56,12 +58,12 @@ func (a *AggregateRoot) applyToInternalState(e Event) {
 	a.lastEventSequence = e.EventSequence()
 }
 
-func (a *AggregateRoot) CommitEvents(handler func(e Event)) {
+func (a *AggregateRoot) CommitEvents(version int64, handler func(e Event)) {
 	if len(a.uncommitted) > 0 {
 		for _, e := range a.uncommitted {
 			handler(e)
 		}
 		a.uncommitted = EventList{}
-		a.version++
+		a.version = version
 	}
 }

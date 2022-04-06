@@ -47,14 +47,14 @@ func (r Repository) Get(streamId string) (eventsource.Stream, error) {
 		r.Log.V(1).Error(err, "failed to fetch event stream chunks")
 		return eventsource.Stream{}, err
 	}
-	r.Log.V(1).Info("event stream chunks fetched", "chunks", len(chunks.Items))
+	r.Log.V(1).Info("event stream chunks fetched", "chunks", len(chunks))
 
 	stream, err := r.convertToEventStream(chunks, streamId)
 	if err != nil {
 		r.Log.V(1).Error(err, "failed to convert event stream chunks to event stream")
 		return eventsource.Stream{}, err
 	}
-	r.Log.V(1).Info("event stream loaded", "commits", len(stream.Commits))
+	r.Log.V(1).Info("event stream loaded", "version", stream.Version())
 
 	return stream, nil
 }
@@ -82,16 +82,16 @@ func (r Repository) Save(aggregate eventsource.Aggregate) (events int, err error
 
 func (r Repository) Delete(stream eventsource.Stream) error {
 	// TODO: Implement delete of EventStreamChunks using DeleteAllOf and FieldSelector
-	commits := stream.Commits
+	commits := stream.Commits()
 	sort.Slice(commits[:], func(i, j int) bool {
-		return commits[i].Id > commits[j].Id
+		return commits[i].Sequence() > commits[j].Sequence() // TODO: Verify delete order
 	})
 
 	deleted := 0
 	for _, c := range commits {
 		nn := types.NamespacedName{
 			Namespace: config.Operator.Namespace,
-			Name:      c.Id,
+			Name:      c.Id(),
 		}
 		r.Log.V(1).Info("deleting EventStreamChunk", "chunk", nn.String())
 		if err := r.Client.Delete(r.Context, &eventv1alpha1.EventStreamChunk{
@@ -113,12 +113,12 @@ func (r Repository) Delete(stream eventsource.Stream) error {
 	return nil
 }
 
-func (r Repository) getEventStreamChunks(streamId string) (eventv1alpha1.EventStreamChunkList, error) {
+func (r Repository) getEventStreamChunks(streamId string) ([]eventv1alpha1.EventStreamChunk, error) {
 	var eventStreamChunks eventv1alpha1.EventStreamChunkList
 
 	fs, err := fields.ParseSelector(fmt.Sprintf("%s==%s", StreamIdFieldIndexKey, streamId))
 	if err != nil {
-		return eventStreamChunks, err
+		return eventStreamChunks.Items, err
 	}
 
 	options := client.ListOptions{}
@@ -126,23 +126,21 @@ func (r Repository) getEventStreamChunks(streamId string) (eventv1alpha1.EventSt
 	options.Namespace = config.Operator.Namespace
 
 	if err := r.List(r.Context, &eventStreamChunks, &options); err != nil {
-		return eventv1alpha1.EventStreamChunkList{}, err
+		return make([]eventv1alpha1.EventStreamChunk, 0), err
 	}
 
-	return eventStreamChunks, nil
+	return eventStreamChunks.Sort(), nil
 }
 
-func (r Repository) convertToEventStream(list eventv1alpha1.EventStreamChunkList, id string) (eventsource.Stream, error) {
+func (r Repository) convertToEventStream(chunks []eventv1alpha1.EventStreamChunk, id string) (eventsource.Stream, error) {
 	commits := make([]eventsource.Commit, 0)
-	for _, c := range list.Items {
+	for _, c := range chunks {
 		if c.Spec.StreamId != id {
 			return eventsource.Stream{}, fmt.Errorf("wrong expected stream id for chunk (expected=%s, actual=%s)", id, c.Spec.StreamId)
 		}
 
-		commit := eventsource.Commit{
-			Id:     c.Name,
-			Events: make([]eventsource.Event, 0),
-		}
+		commit := eventsource.NewCommit(c.Name, c.Spec.StreamVersion)
+		commit.SetTimestamp(c.Spec.Timestamp)
 		for _, e := range c.Spec.Events {
 			event, err := r.serializer.UnmarshalEvent(eventsource.Record{
 				Data: []byte(e.Raw),
@@ -150,27 +148,26 @@ func (r Repository) convertToEventStream(list eventv1alpha1.EventStreamChunkList
 			if err != nil {
 				return eventsource.Stream{}, err
 			}
-			commit.Events = append(commit.Events, event)
+			commit.Append(event)
 		}
-		commits = append(commits, commit)
+		commits = append(commits, *commit)
 	}
-	return eventsource.Stream{
-		Id:      id,
-		Commits: commits,
-	}, nil
+	return eventsource.NewStream(id, commits...), nil
 }
 
 func (r Repository) convertToEventStreamChunk(commit eventsource.Commit, streamId string) (eventv1alpha1.EventStreamChunk, error) {
 	chunk := eventv1alpha1.EventStreamChunk{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      commit.Id,
+			Name:      commit.Id(),
 			Namespace: config.Operator.Namespace,
 		},
 		Spec: eventv1alpha1.EventStreamChunkSpec{
-			StreamId: streamId,
+			StreamId:      streamId,
+			StreamVersion: commit.Sequence(),
+			Timestamp:     commit.Timestamp(),
 		},
 	}
-	for _, e := range commit.Events {
+	for _, e := range commit.Events() {
 		record, err := r.serializer.MarshalEvent(e)
 		if err != nil {
 			return eventv1alpha1.EventStreamChunk{}, err

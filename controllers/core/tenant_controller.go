@@ -99,7 +99,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			if err != nil {
 				return rctx.Error(err)
 			} else {
-				return rctx.RequeueIn(5, "events might need to be processed in the finalizer process")
+				return rctx.RequeueIn(5, "events might need to be processed in the finalizer")
 			}
 		}
 		return rctx.Done()

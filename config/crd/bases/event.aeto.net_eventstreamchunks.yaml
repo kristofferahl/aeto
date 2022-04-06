@@ -16,7 +16,18 @@ spec:
     singular: eventstreamchunk
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.id
+      name: Id
+      type: string
+    - jsonPath: .spec.version
+      name: Version
+      type: string
+    - jsonPath: .spec.ts
+      name: Timestamp
+      priority: 1
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: EventStreamChunk is the Schema for the eventstreamchunks API
@@ -48,12 +59,22 @@ spec:
                   - raw
                   type: object
                 type: array
-              streamId:
+              id:
                 description: StreamId defines the ID of the stream
                 type: string
+              ts:
+                description: Timestamp is point in time when the chunk was created
+                type: string
+              version:
+                description: StreamVersion is the version of the stream at the point
+                  when it chunk was created
+                format: int64
+                type: integer
             required:
             - events
-            - streamId
+            - id
+            - ts
+            - version
             type: object
           status:
             description: EventStreamChunkStatus defines the observed state of EventStreamChunk
