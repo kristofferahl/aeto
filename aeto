@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 
-print() {
-  echo
-  echo 'ResourceTemplate'
-  kubectl get resourcetemplate -A -o wide
+declare resource_prefix="${AETO_RESOURCE_PREFIX:-tenant-}"
 
-  echo
-  echo 'Blueprint'
-  kubectl get blueprint -A -o wide
+print() {
+  local all=false
+  [[ "${1:-}" == '--all' ]] && all=true
+
+  if [[ ${all:?} == true ]]; then
+    echo
+    echo 'ResourceTemplate'
+    kubectl get resourcetemplate -A -o wide
+
+    echo
+    echo 'Blueprint'
+    kubectl get blueprint -A -o wide
+  fi
 
   echo
   echo 'Tenant'
@@ -21,17 +28,19 @@ print() {
   echo 'ResourceSet'
   kubectl get resourceset -A -o wide
 
-  echo
-  echo 'Namespaces'
-  kubectl get namespaces | grep 'tenant-'
+  if [[ ${all:?} == true ]]; then
+    echo
+    echo 'Namespaces'
+    kubectl get namespaces | grep "${resource_prefix:?}"
 
-  echo
-  echo 'NetworkPolicy'
-  kubectl get networkpolicy -A
+    echo
+    echo 'NetworkPolicy'
+    kubectl get networkpolicy -A
 
-  echo
-  echo 'LimitRange'
-  kubectl get limitrange -A
+    echo
+    echo 'LimitRange'
+    kubectl get limitrange -A
+  fi
 
   echo
   echo 'AWS Route53 HostedZone'
@@ -45,17 +54,19 @@ print() {
   echo 'AWS ACM CertificateConnector'
   kubectl get certificateconnector -A -o wide
 
-  echo
-  echo 'Deployment'
-  kubectl get deployment -A | grep 'tenant-'
+  if [[ ${all:?} == true ]]; then
+    echo
+    echo 'Deployment'
+    kubectl get deployment -A | grep "${resource_prefix:?}"
 
-  echo
-  echo 'Service'
-  kubectl get service -A | grep 'tenant-'
+    echo
+    echo 'Service'
+    kubectl get service -A | grep "${resource_prefix:?}"
 
-  echo
-  echo 'Ingress'
-  kubectl get ingress -A | grep 'tenant-'
+    echo
+    echo 'Ingress'
+    kubectl get ingress -A | grep "${resource_prefix:?}"
+  fi
 
   echo
 }
@@ -78,22 +89,17 @@ apply() {
   kubectl apply -k config/default-resources/
   kubectl apply -k config/samples/
   echo 'watching Tenant and ResourceSets...'
-  # kubectl -n default wait --for=condition=ready -o name tenant example
+  # kubectl --namespace <namespace> tenant <name> wait --for=condition=ready -o name
   sleep 1
   while true; do
-    clear
-    kubectl -n default get tenant example -o wide
-    echo
-    kubectl -n aeto get resourcesets -o wide
-    echo
-    kubectl -n aeto get certificateconnector -o wide
+    clear && print
     sleep 3
   done
 }
 
 destroy() {
   kubectl delete -k config/samples/
-  print
+  print --all
   echo 'Press any key to continue running a full cleanup...'
   read -r
   cleanup
@@ -137,7 +143,7 @@ main() {
   cleanup) cleanup ;;
   watch) watch ;;
   events) events ;;
-  *) print ;;
+  *) print --all ;;
   esac
 }
 
