@@ -34,12 +34,18 @@ type AlbIngressControllerConnector struct {
 // Connect reconciles certificate connections for ALB Ingress Controller
 func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) (changed bool, connected bool, result reconcile.Result) {
 	certificateArns := make([]string, 0)
+	ready := true
 	connected = true
 	for _, certificate := range certificates {
-		if apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeReady) && certificate.Status.Arn != "" {
-			certificateArns = append(certificateArns, certificate.Status.Arn)
-			if !apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeInUse) {
-				connected = false
+		deleteing := certificate.GetDeletionTimestamp().IsZero() == false
+		if !deleteing && certificate.Status.Arn != "" {
+			if apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeReady) {
+				certificateArns = append(certificateArns, certificate.Status.Arn)
+				if !apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeInUse) {
+					connected = false
+				}
+			} else {
+				ready = false
 			}
 		}
 	}
@@ -92,6 +98,10 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 	}
 
 	if len(errors) == 0 {
+		if !ready {
+			return len(changes) > 0, connected, ctx.RequeueIn(60, "waiting for certificates to become ready")
+		}
+
 		return len(changes) > 0, connected, ctx.Done()
 	}
 
