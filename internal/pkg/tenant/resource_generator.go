@@ -219,8 +219,10 @@ func (r *ResourceGenerator) generateFromResourceGroup(resourceGroup corev1alpha1
 		}
 
 		// TODO: Override existing labels and annotations if they exist?
-		resource.SetLabels(r.state.Labels)
-		resource.SetAnnotations(r.state.Annotations)
+		labels := merge(resource.GetLabels(), r.state.Labels)
+		annotations := merge(resource.GetAnnotations(), r.state.Annotations)
+		resource.SetLabels(labels)
+		resource.SetAnnotations(annotations)
 
 		r.ctx.Log.V(1).Info("all changes applied to resource", "template", resourceGroup.Template, "resource", resource.UnstructuredContent())
 	}
@@ -282,4 +284,16 @@ func (r *ResourceGenerator) generateUnstructureResources(json string, templateDa
 	}
 
 	return allResources, nil
+}
+
+func merge(m1 map[string]string, m2 map[string]string) map[string]string {
+	m := map[string]string{}
+	for k, v := range m1 {
+		m[k] = v
+	}
+
+	for k, v := range m2 {
+		m[k] = v
+	}
+	return m
 }
