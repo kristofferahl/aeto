@@ -97,6 +97,14 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	statusResult := r.reconcileStatus(rctx, certificate, cd, certificateResult.Error())
 	results = append(results, statusResult)
 
+	if !apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeReady) {
+		results = append(results, rctx.RequeueIn(15, "waiting for certificate to be ready"))
+	}
+
+	if !apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeInUse) {
+		results = append(results, rctx.RequeueIn(15, "waiting for certificate to be in use"))
+	}
+
 	return rctx.Complete(results...)
 }
 
@@ -321,8 +329,11 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 	_, err = r.AWS.Acm.DeleteCertificate(ctx.Context, &acm.DeleteCertificateInput{
 		CertificateArn: aws.String(ca),
 	})
-	// TODO: Handle error for Certificate InUse or simply requeue
 	if err != nil {
+		var riue *acmtypes.ResourceInUseException
+		if errors.As(err, &riue) {
+			return ctx.RequeueIn(15, fmt.Sprintf("failed to delete AWS ACM Certificate %s as it is currently in use", ca))
+		}
 		ctx.Log.Error(err, "failed to delete AWS ACM Certificate", "arn", ca)
 		return ctx.Error(err)
 	}

@@ -99,7 +99,11 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 
 	if len(errors) == 0 {
 		if !ready {
-			return len(changes) > 0, connected, ctx.RequeueIn(60, "waiting for certificates to become ready")
+			return len(changes) > 0, connected, ctx.RequeueIn(15, "waiting for certificates to become ready")
+		}
+
+		if !connected {
+			return len(changes) > 0, connected, ctx.RequeueIn(15, "waiting for certificates to be in use")
 		}
 
 		return len(changes) > 0, connected, ctx.Done()

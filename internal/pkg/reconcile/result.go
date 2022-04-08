@@ -20,6 +20,11 @@ func (rr *Result) RequeueIn(duration time.Duration, reason string) {
 	rr.requeueReason = reason
 }
 
+func (rr *Result) Reset() {
+	rr.requeueAfter = 0
+	rr.requeueReason = ""
+}
+
 // Error returns true when the result represents a failed reconcile attempt
 func (rr Result) Error() bool {
 	return rr.err != nil

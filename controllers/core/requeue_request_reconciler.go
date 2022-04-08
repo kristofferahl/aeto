@@ -29,10 +29,10 @@ type RequeueRequestEventHandler struct {
 func (h *RequeueRequestEventHandler) On(e eventsource.Event) {
 	switch e.(type) {
 	case *tenant.ResourceGenererationFailed:
-		h.state.RequeueIn(15*time.Second, "resource generation failed")
+		h.state.RequeueIn(15*time.Second, "resource generation partially failed")
 		break
 	case *tenant.ResourceGenererationSuccessful:
-		h.state.RequeueIn(0*time.Second, "resource generation failed")
+		h.state.Reset()
 		break
 	}
 }
