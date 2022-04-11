@@ -224,7 +224,11 @@ func (r *ResourceGenerator) generateFromResourceGroup(resourceGroup corev1alpha1
 		resource.SetLabels(labels)
 		resource.SetAnnotations(annotations)
 
-		r.ctx.Log.V(1).Info("all changes applied to resource", "template", resourceGroup.Template, "resource", resource.UnstructuredContent())
+		var content interface{} = resource.UnstructuredContent()
+		if util.SliceContainsString(config.NonLoggableKinds(), resource.GetKind()) {
+			content = resource.GroupVersionKind().String()
+		}
+		r.ctx.Log.V(1).Info("all changes applied to resource", "template", resourceGroup.Template, "resource", content)
 	}
 
 	return allResources, nil

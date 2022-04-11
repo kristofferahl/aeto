@@ -55,8 +55,7 @@ func ReconcileResourceSet(ctx reconcile.Context, k8s kubernetes.Client, stream e
 		return sets[i].Spec.Active == false
 	})
 
-	// TODO: Remove logging of generated ResourceSets?
-	ctx.Log.V(1).Info("replayed events onto ResourceSets", "count", len(state.ResourceSets), "active", active, "resource-sets", sets)
+	ctx.Log.V(2).Info("replayed events onto ResourceSets", "count", len(state.ResourceSets), "active", active, "resource-sets", sets)
 
 	// TODO: Decide what the behavior should be. Do we replace all resource sets, patch or apply or ?
 	for _, rs := range sets {
