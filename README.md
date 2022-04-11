@@ -35,8 +35,9 @@ The `config/samples` and `config/default-resources` contains a working default s
 
 ### Pre-requisites
 
-- [Go](https://golang.org/) 1.13 or later
-- [Kubebuilder](https://kubebuilder.io/) 2.1.0
+- [Go](https://golang.org/) 1.16 or later
+- [operator-sdk](https://sdk.operatorframework.io/) 1.15.0
+- [Kubebuilder](https://kubebuilder.io/) 3.2.0
 - [AWS](https://aws.amazon.com/) account and credentials
 - [Kubernetes](https://kubernetes.io/) cluster
 
