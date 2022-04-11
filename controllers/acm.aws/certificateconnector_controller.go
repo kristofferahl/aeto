@@ -47,7 +47,7 @@ type CertificateConnectorReconciler struct {
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors/finalizers,verbs=update
-//+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificate,verbs=get;list;watch
+//+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificates,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

@@ -9,14 +9,6 @@ rules:
 - apiGroups:
   - acm.aws.aeto.net
   resources:
-  - certificate
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - acm.aws.aeto.net
-  resources:
   - certificateconnectors
   verbs:
   - create
