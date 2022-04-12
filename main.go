@@ -92,7 +92,7 @@ func main() {
 
 	// Operator flags
 	flag.StringVar(&operatorNamespace, "operator-namespace", "aeto", "The operator namespace.")
-	flag.DurationVar(&operatorReconcileInterval, "operator-reconcile-interval", 60*time.Minute, "The interval of the reconciliation loop")
+	flag.DurationVar(&operatorReconcileInterval, "operator-reconcile-interval", 30*time.Minute, "The interval of the reconciliation loop")
 	flag.IntVar(&operatorMaxTenantResourceSets, "operator-max-tenant-resourcesets", 3, "The maximum number of resourcesets kept for each tenant")
 
 	// Parse flags
