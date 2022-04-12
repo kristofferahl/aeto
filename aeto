@@ -117,7 +117,7 @@ cleanup() {
 
 watch() {
   while true; do
-    clear && print && sleep 1
+    clear && print && sleep 3
   done
 }
 
