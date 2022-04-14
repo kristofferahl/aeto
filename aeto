@@ -135,6 +135,12 @@ localenv() {
   mv .tempenv .env
 }
 
+release() {
+  make manifests
+  make generate
+  goreleaser release --rm-dist
+}
+
 main() {
   case "${1:-}" in
   localenv) localenv ;;
@@ -143,6 +149,7 @@ main() {
   cleanup) cleanup ;;
   watch) watch ;;
   events) events ;;
+  release) release ;;
   *) print --all ;;
   esac
 }
