@@ -21,6 +21,16 @@ archives:
     replacements:
       darwin: Darwin
       linux: Linux
+    files:
+      - README*
+      - LICENCE*
+      - config/crd/*
+      - config/rbac/*
+      - config/manager/*
+      - config/prometheus/*
+      - config/default/*
+      - config/default-resources/*
+      - config/samples/*
 dockers:
   - id: docker_amd64
     goos: linux
