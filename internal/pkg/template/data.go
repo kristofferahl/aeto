@@ -3,6 +3,7 @@ package template
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 )
@@ -15,6 +16,7 @@ type Data struct {
 	Labels       map[string]string
 	Annotations  map[string]string
 	Parameters   []*corev1alpha1.Parameter
+	Utils        UtilityFunctions
 }
 
 type Namespaces struct {
@@ -48,4 +50,30 @@ func (d Data) Bool(name string) (bool, error) {
 		return false, err
 	}
 	return strconv.ParseBool(v)
+}
+
+type UtilityFunctions struct {
+	String
+	Slice
+}
+
+type String struct{}
+
+func (d String) Replace(s, old, new string, n int) string {
+	return strings.Replace(s, old, new, n)
+}
+
+func (d String) ReplaceAll(s string, old string, new string) string {
+	return strings.ReplaceAll(s, old, new)
+}
+
+type Slice struct{}
+
+func (d Slice) ContainsString(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
 }

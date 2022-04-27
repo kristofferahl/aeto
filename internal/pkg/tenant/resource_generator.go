@@ -246,6 +246,7 @@ func (r *ResourceGenerator) newTemplateData(blueprint corev1alpha1.Blueprint, pa
 		Labels:      r.state.Labels,
 		Annotations: r.state.Annotations,
 		Parameters:  parameters,
+		Utils:       template.UtilityFunctions{},
 	}
 }
 
