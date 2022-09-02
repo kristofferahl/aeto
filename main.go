@@ -42,14 +42,16 @@ import (
 
 	"github.com/kristofferahl/aeto/internal/pkg/aws"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
-	dyn "github.com/kristofferahl/aeto/internal/pkg/dynamic"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/util"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
 	route53awsv1alpha1 "github.com/kristofferahl/aeto/apis/route53.aws/v1alpha1"
 	acmawscontrollers "github.com/kristofferahl/aeto/controllers/acm.aws"
 	corecontrollers "github.com/kristofferahl/aeto/controllers/core"
+	eventcontrollers "github.com/kristofferahl/aeto/controllers/event"
 	route53awscontrollers "github.com/kristofferahl/aeto/controllers/route53.aws"
 	//+kubebuilder:scaffold:imports
 )
@@ -65,6 +67,7 @@ func init() {
 	utilruntime.Must(corev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(route53awsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(acmawsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(eventv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -76,19 +79,21 @@ func main() {
 	var operatorNamespace string
 	var operatorReconcileInterval time.Duration
 	var operatorEnabledControllers string
+	var operatorMaxTenantResourceSets int
 
 	// Kubebuilder flags
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	opts := zap.Options{
-		Development: true,
+		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
 
 	// Operator flags
 	flag.StringVar(&operatorNamespace, "operator-namespace", "aeto", "The operator namespace.")
-	flag.DurationVar(&operatorReconcileInterval, "operator-reconcile-interval", 60*time.Minute, "The interval of the reconciliation loop")
+	flag.DurationVar(&operatorReconcileInterval, "operator-reconcile-interval", 30*time.Minute, "The interval of the reconciliation loop")
+	flag.IntVar(&operatorMaxTenantResourceSets, "operator-max-tenant-resourcesets", 3, "The maximum number of resourcesets kept for each tenant")
 
 	// Parse flags
 	flag.Parse()
@@ -97,6 +102,7 @@ func main() {
 	// Operator environment overrides
 	operatorNamespace = config.StringEnvVar("OPERATOR_NAMESPACE", operatorNamespace)
 	operatorReconcileInterval = config.DurationEnvVar("OPERATOR_RECONCILE_INTERVAL", operatorReconcileInterval)
+	operatorMaxTenantResourceSets = config.IntEnvVar("OPERATOR_MAX_TENANT_RESOURCESETS", operatorMaxTenantResourceSets)
 	operatorEnabledControllers = config.StringEnvVar("OPERATOR_ENABLED_CONTROLLERS", strings.Join([]string{
 		"Tenant",
 		"ResourceTemplate",
@@ -105,6 +111,7 @@ func main() {
 		"HostedZone",
 		"Certificate",
 		"CertificateConnector",
+		"EventStreamChunk",
 	}, ","))
 
 	enabledControllers := strings.Split(strings.TrimLeft(strings.TrimRight(operatorEnabledControllers, ","), ","), ",")
@@ -117,8 +124,9 @@ func main() {
 
 	// Configure operator
 	config.Operator = config.OperatorConfig{
-		ReconcileInterval: operatorReconcileInterval,
-		Namespace:         operatorNamespace,
+		ReconcileInterval:     operatorReconcileInterval,
+		Namespace:             operatorNamespace,
+		MaxTenantResourceSets: operatorMaxTenantResourceSets,
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -163,16 +171,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	dynamicClients := dyn.Clients{
-		DynamicClient:   dynamicClient,
-		DiscoveryClient: discoveryClient,
-	}
+	k8sClient := kubernetes.NewClient(mgr.GetClient(), dynamicClient, discoveryClient)
 
 	if util.SliceContainsString(enabledControllers, "Tenant") {
 		if err = (&corecontrollers.TenantReconciler{
-			Client:   mgr.GetClient(),
-			Dynamic:  dynamicClients,
 			Scheme:   mgr.GetScheme(),
+			Client:   k8sClient,
 			Recorder: mgr.GetEventRecorderFor("tenant-controller"),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Tenant")
@@ -181,8 +185,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "ResourceTemplate") {
 		if err = (&corecontrollers.ResourceTemplateReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "ResourceTemplate")
 			os.Exit(1)
@@ -190,8 +194,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "Blueprint") {
 		if err = (&corecontrollers.BlueprintReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Blueprint")
 			os.Exit(1)
@@ -199,9 +203,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "ResourceSet") {
 		if err = (&corecontrollers.ResourceSetReconciler{
-			Client:  mgr.GetClient(),
-			Dynamic: dynamicClients,
-			Scheme:  mgr.GetScheme(),
+			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "ResourceSet")
 			os.Exit(1)
@@ -209,8 +212,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "HostedZone") {
 		if err = (&route53awscontrollers.HostedZoneReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 			AWS:    awsClients,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "HostedZone")
@@ -219,8 +222,8 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "Certificate") {
 		if err = (&acmawscontrollers.CertificateReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 			AWS:    awsClients,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Certificate")
@@ -229,10 +232,19 @@ func main() {
 	}
 	if util.SliceContainsString(enabledControllers, "CertificateConnector") {
 		if err = (&acmawscontrollers.CertificateConnectorReconciler{
-			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CertificateConnector")
+			os.Exit(1)
+		}
+	}
+	if util.SliceContainsString(enabledControllers, "EventStreamChunk") {
+		if err = (&eventcontrollers.EventStreamChunkReconciler{
+			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "EventStreamChunk")
 			os.Exit(1)
 		}
 	}

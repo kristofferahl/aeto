@@ -37,7 +37,7 @@ spec:
                 imagePullPolicy: Always
                 env:
                   - name: LANDING_TITLE
-                    value: "{{ .Name }}"
+                    value: "{{ .DisplayName }}"
                   - name: LANDING_DESCRIPTION
                     value: "powered by // aeto (aws-eks-tenant-operator)"
                 ports:
@@ -69,7 +69,8 @@ spec:
     - apiVersion: networking.k8s.io/v1
       kind: Ingress
       metadata:
-        name: go-landing
+        labels:
+          app.kubernetes.io/name: go-landing
         annotations:
           kubernetes.io/ingress.class: '{{ .String "IngressClass" }}'
           external-dns.alpha.kubernetes.io/target: '{{ .String "ExternalDnsTarget" }}'
@@ -83,6 +84,6 @@ spec:
                   pathType: Prefix
                   backend:
                     service:
-                      name: go-landing
+                      name: "{{ .PrefixedName }}"
                       port:
                         name: web

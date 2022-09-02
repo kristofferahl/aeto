@@ -5,10 +5,11 @@ import (
 	"strings"
 
 	networkingv1 "k8s.io/api/networking/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"github.com/kristofferahl/aeto/internal/pkg/util"
 )
@@ -26,22 +27,32 @@ const (
 
 // AlbIngressControllerConnector defines a connector of certificates for use with ALB Ingress Contoller
 type AlbIngressControllerConnector struct {
-	client.Client
+	kubernetes.Client
 	Spec acmawsv1alpha1.IngressSpec
 }
 
 // Connect reconciles certificate connections for ALB Ingress Controller
-func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) (changed bool, result reconcile.Result) {
+func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificates []acmawsv1alpha1.Certificate) (changed bool, connected bool, result reconcile.Result) {
 	certificateArns := make([]string, 0)
+	ready := true
+	connected = true
 	for _, certificate := range certificates {
-		if certificate.Status.Ready && certificate.Status.Arn != "" {
-			certificateArns = append(certificateArns, certificate.Status.Arn)
+		deleteing := certificate.GetDeletionTimestamp().IsZero() == false
+		if !deleteing && certificate.Status.Arn != "" {
+			if apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeReady) {
+				certificateArns = append(certificateArns, certificate.Status.Arn)
+				if !apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeInUse) {
+					connected = false
+				}
+			} else {
+				ready = false
+			}
 		}
 	}
 
 	ingresses, ingressRes := c.GetIngressList(ctx)
 	if ingressRes.Error() {
-		return false, ingressRes
+		return false, connected, ingressRes
 	}
 
 	changes := make([]string, 0)
@@ -70,7 +81,7 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 		changed := certArnAnnotationValue != ingress.Annotations[AlbIngressControllerIngressAnnotation_CertificateArnKey]
 		if changed {
 			ctx.Log.V(1).Info("updating Ingress with new certificates", "namespace", ingress.Namespace, "name", ingress.Name, "old-arns", certArnAnnotationValue, "new-arns", ingress.Annotations[AlbIngressControllerIngressAnnotation_CertificateArnKey])
-			err := c.Update(ctx.Context, &ingress)
+			err := c.Update(ctx, &ingress)
 			if err != nil {
 				ctx.Log.Error(err, "failed to update Ingress", "namespace", ingress.Namespace, "name", ingress.Name)
 				errors = append(errors, err)
@@ -87,17 +98,25 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 	}
 
 	if len(errors) == 0 {
-		return len(changes) > 0, ctx.Done()
+		if !ready {
+			return len(changes) > 0, connected, ctx.RequeueIn(15, "waiting for certificates to become ready")
+		}
+
+		if !connected {
+			return len(changes) > 0, connected, ctx.RequeueIn(15, "waiting for certificates to be in use")
+		}
+
+		return len(changes) > 0, connected, ctx.Done()
 	}
 
-	return len(changes) > 0, ctx.Error(fmt.Errorf("one ore more errors occured when connecting certificates to ingresses; %v", errors))
+	return len(changes) > 0, connected, ctx.Error(fmt.Errorf("one ore more errors occured when connecting certificates to ingresses; %v", errors))
 }
 
 func (c AlbIngressControllerConnector) GetIngressList(ctx reconcile.Context) ([]networkingv1.Ingress, reconcile.Result) {
 	selector := c.Spec.Selector
 
 	var list networkingv1.IngressList
-	if err := c.List(ctx.Context, &list, selector.ListOptions()); err != nil {
+	if err := c.List(ctx, &list, selector.ListOptions()); err != nil {
 		return []networkingv1.Ingress{}, ctx.Error(err)
 	}
 

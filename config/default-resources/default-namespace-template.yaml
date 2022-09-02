@@ -13,6 +13,6 @@ spec:
       metadata:
         name: "injected"
         labels:
-          app.net/tenant: "injected"
+          aeto.net/tenant: "injected"
         annotations:
           aeto.net/controlled: "injected"

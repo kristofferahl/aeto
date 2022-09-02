@@ -18,8 +18,9 @@ package acmaws
 
 import (
 	"context"
-	"time"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types" // Required for Watching
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,19 +33,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"               // Required for Watching
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
+	"github.com/kristofferahl/aeto/internal/pkg/config"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
 // CertificateConnectorReconciler reconciles a CertificateConnector object
 type CertificateConnectorReconciler struct {
-	client.Client
+	kubernetes.Client
 	Scheme *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificateconnectors/finalizers,verbs=update
-//+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificate,verbs=get;list;watch
+//+kubebuilder:rbac:groups=acm.aws.aeto.net,resources=certificates,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -59,53 +62,39 @@ func (r *CertificateConnectorReconciler) Reconcile(ctx context.Context, req ctrl
 	rctx := reconcile.NewContext("certificateconnector", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
-	certificateConnector, err := r.getCertificateConnector(rctx, req)
-	if err != nil {
-		rctx.Log.Info("CertificateConnector not found")
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
+	var certificateConnector acmawsv1alpha1.CertificateConnector
+	if err := r.Get(rctx, req.NamespacedName, &certificateConnector); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("found CertificateConnector", "certificate-connector", certificateConnector.NamespacedName())
+
+	certificates, err := r.getCertificates(rctx, certificateConnector)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	connector, err := NewConnector(r.Client, certificateConnector)
+	if err != nil {
+		rctx.Log.Error(err, "failed to create connector", "certificate-connector", certificateConnector.NamespacedName())
+		return ctrl.Result{}, nil
+	}
 
 	results := reconcile.ResultList{}
 
-	certificates, listRes := r.getCertificates(rctx, certificateConnector)
-	results = append(results, listRes)
-	if results.Success() {
-		connector, err := NewConnector(r.Client, certificateConnector)
-		if err != nil {
-			rctx.Log.Error(err, "failed to create connector", "certificate-connector", certificateConnector.NamespacedName())
-			return ctrl.Result{}, nil
-		}
+	changed, connected, connectRes := connector.Connect(rctx, certificates)
+	results = append(results, connectRes)
 
-		changed, connectRes := connector.Connect(rctx, certificates)
-		results = append(results, connectRes)
-
-		if changed {
-			statusResult := r.reconcileStatus(rctx, certificateConnector)
-			results = append(results, statusResult)
-		}
-	}
+	statusResult := r.reconcileStatus(rctx, certificateConnector, changed, connected)
+	results = append(results, statusResult)
 
 	return rctx.Complete(results...)
 }
 
-func (r *CertificateConnectorReconciler) getCertificateConnector(ctx reconcile.Context, req ctrl.Request) (acmawsv1alpha1.CertificateConnector, error) {
-	var connector acmawsv1alpha1.CertificateConnector
-	if err := r.Get(ctx.Context, req.NamespacedName, &connector); err != nil {
-		return acmawsv1alpha1.CertificateConnector{}, err
-	}
-	return connector, nil
-}
-
-func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector) ([]acmawsv1alpha1.Certificate, reconcile.Result) {
+func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector) ([]acmawsv1alpha1.Certificate, error) {
 	selector := connector.Spec.Certificates.Selector
 
 	var list acmawsv1alpha1.CertificateList
-	if err := r.List(ctx.Context, &list, selector.ListOptions()); err != nil {
-		return []acmawsv1alpha1.Certificate{}, ctx.Error(err)
+	if err := r.List(ctx, &list, selector.ListOptions()); err != nil {
+		return []acmawsv1alpha1.Certificate{}, err
 	}
 
 	filteredList := make([]acmawsv1alpha1.Certificate, 0)
@@ -115,18 +104,34 @@ func (r *CertificateConnectorReconciler) getCertificates(ctx reconcile.Context, 
 		}
 	}
 
-	return filteredList, ctx.Done()
+	return filteredList, nil
 }
 
-func (r *CertificateConnectorReconciler) reconcileStatus(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector) reconcile.Result {
-	connector.Status.LastUpdated = time.Now().UTC().Format(time.UnixDate)
-
-	ctx.Log.V(1).Info("updating CertificateConnector status")
-	if err := r.Status().Update(ctx.Context, &connector); err != nil {
-		ctx.Log.Error(err, "failed to update CertificateConnector status")
-		return ctx.Error(err)
+func (r *CertificateConnectorReconciler) reconcileStatus(ctx reconcile.Context, connector acmawsv1alpha1.CertificateConnector, changed bool, connected bool) reconcile.Result {
+	status := metav1.ConditionFalse
+	reason := "CertificatesChanged"
+	if !changed {
+		if connected {
+			status = metav1.ConditionTrue
+			reason = "CertificatesConnected"
+		} else {
+			status = metav1.ConditionFalse
+			reason = "CertificatesNotConnected"
+		}
 	}
 
+	inSyncCondition := metav1.Condition{
+		Type:               acmawsv1alpha1.ConditionTypeInSync,
+		Status:             status,
+		Reason:             reason,
+		Message:            "",
+		ObservedGeneration: connector.Generation,
+	}
+	apimeta.SetStatusCondition(&connector.Status.Conditions, inSyncCondition)
+
+	if err := r.UpdateStatus(ctx, &connector); err != nil {
+		return ctx.Error(err)
+	}
 	return ctx.Done()
 }
 
@@ -145,9 +150,9 @@ func (r *CertificateConnectorReconciler) SetupWithManager(mgr ctrl.Manager) erro
 func (r *CertificateConnectorReconciler) findCertificateConnectorsForCertificate(certificate client.Object) []kreconcile.Request {
 	certificateConnectorList := &acmawsv1alpha1.CertificateConnectorList{}
 	listOps := &client.ListOptions{
-		Namespace: "default", // TODO: Use namespace of operator
+		Namespace: config.Operator.Namespace,
 	}
-	err := r.List(context.TODO(), certificateConnectorList, listOps)
+	err := r.Client.GetClient().List(context.TODO(), certificateConnectorList, listOps)
 	if err != nil {
 		return []kreconcile.Request{}
 	}

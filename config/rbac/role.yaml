@@ -9,14 +9,6 @@ rules:
 - apiGroups:
   - acm.aws.aeto.net
   resources:
-  - certificate
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - acm.aws.aeto.net
-  resources:
   - certificateconnectors
   verbs:
   - create
@@ -166,6 +158,32 @@ rules:
   - core.aeto.net
   resources:
   - tenants/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - event.aeto.net
+  resources:
+  - eventstreamchunks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - event.aeto.net
+  resources:
+  - eventstreamchunks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - event.aeto.net
+  resources:
+  - eventstreamchunks/status
   verbs:
   - get
   - patch

@@ -25,6 +25,8 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
+	ConditionTypeReady string = "Ready"
+
 	HostedZoneDeletionPolicyDefault HostedZoneDeletionPolicy = "default"
 	HostedZoneDeletionPolicyForce   HostedZoneDeletionPolicy = "force"
 )
@@ -73,20 +75,24 @@ type HostedZoneStatus struct {
 
 	Id string `json:"id,omitempty"`
 
-	Ready bool `json:"ready,omitempty"`
-
-	State string `json:"state,omitempty"`
+	Status string `json:"status,omitempty"`
 
 	ConnectedTo string `json:"connectedTo,omitempty"`
+
+	RecordSets *int64 `json:"recordsets,omitempty"`
+
+	// Conditions represent the latest available observations of the ResourceSet state.
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="HostedZone",priority=0,type=string,JSONPath=`.spec.name`
 //+kubebuilder:printcolumn:name="Id",priority=1,type=string,JSONPath=`.status.id`
-//+kubebuilder:printcolumn:name="State",priority=1,type=string,JSONPath=`.status.state`
-//+kubebuilder:printcolumn:name="Connected_To",priority=1,type=string,JSONPath=`.status.connectedTo`
-//+kubebuilder:printcolumn:name="Ready",priority=0,type=boolean,JSONPath=`.status.ready`
+//+kubebuilder:printcolumn:name="Status",priority=1,type=string,JSONPath=`.status.status`
+//+kubebuilder:printcolumn:name="ConnectedTo",priority=1,type=string,JSONPath=`.status.connectedTo`
+//+kubebuilder:printcolumn:name="RecordSets",priority=1,type=integer,JSONPath=`.status.recordsets`
+//+kubebuilder:printcolumn:name="Ready",priority=0,type="string",JSONPath=`.status.conditions[?(@.type == "Ready")].status`
 
 // HostedZone is the Schema for the hostedzones API
 type HostedZone struct {

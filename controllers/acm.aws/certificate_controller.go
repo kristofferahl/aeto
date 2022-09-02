@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"strings"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,9 +33,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/aws/smithy-go"
 
 	acmawsv1alpha1 "github.com/kristofferahl/aeto/apis/acm.aws/v1alpha1"
 	awsclients "github.com/kristofferahl/aeto/internal/pkg/aws"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 )
 
@@ -43,7 +47,7 @@ const (
 
 // CertificateReconciler reconciles a Certificate object
 type CertificateReconciler struct {
-	client.Client
+	kubernetes.Client
 	Scheme *runtime.Scheme
 	AWS    awsclients.Clients
 }
@@ -65,21 +69,16 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	rctx := reconcile.NewContext("certificate", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
-	certificate, err := r.getCertificate(rctx, req)
-	if err != nil {
-		rctx.Log.Info("Certificate not found")
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
+	var certificate acmawsv1alpha1.Certificate
+	if err := r.Get(rctx, req.NamespacedName, &certificate); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("found Certificate", "certificate", certificate.NamespacedName())
 
 	finalizer := reconcile.NewGenericFinalizer(FinalizerName, func(c reconcile.Context) reconcile.Result {
 		certificate := certificate
 		return r.reconcileDelete(c, certificate)
 	})
-	res, err := reconcile.WithFinalizer(r.Client, rctx, &certificate, finalizer)
+	res, err := reconcile.WithFinalizer(r.Client.GetClient(), rctx, &certificate, finalizer)
 	if res != nil || err != nil {
 		rctx.Log.V(1).Info("returning finalizer results for Certificate", "certificate", certificate.NamespacedName(), "res", res, "error", err)
 		return *res, err
@@ -90,32 +89,88 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	cd, certificateResult := r.reconcileCertificate(rctx, certificate)
 	results = append(results, certificateResult)
 
-	if results.Success() {
+	if results.AllSuccessful() {
 		validationResult := r.reconcileCertificateValidation(rctx, certificate, cd)
 		results = append(results, validationResult)
+	}
 
-		statusResult := r.reconcileStatus(rctx, certificate, cd)
-		results = append(results, statusResult)
+	statusResult := r.reconcileStatus(rctx, certificate, cd, certificateResult.Error())
+	results = append(results, statusResult)
+
+	if !apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeReady) {
+		results = append(results, rctx.RequeueIn(15, "waiting for certificate to be ready"))
+	}
+
+	if !apimeta.IsStatusConditionTrue(certificate.Status.Conditions, acmawsv1alpha1.ConditionTypeInUse) {
+		results = append(results, rctx.RequeueIn(15, "waiting for certificate to be in use"))
 	}
 
 	return rctx.Complete(results...)
 }
 
-func (r *CertificateReconciler) getCertificate(ctx reconcile.Context, req ctrl.Request) (acmawsv1alpha1.Certificate, error) {
-	var cert acmawsv1alpha1.Certificate
-	if err := r.Get(ctx.Context, req.NamespacedName, &cert); err != nil {
-		return acmawsv1alpha1.Certificate{}, err
-	}
-	return cert, nil
-}
-
 func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate) (*acmtypes.CertificateDetail, reconcile.Result) {
-	ca := certificate.Status.Arn
+	ca := ""
+
+	certs, err := r.AWS.FindAcmCertificatesByDomainName(ctx.Context, certificate.Spec.DomainName)
+	if err != nil {
+		ctx.Log.Error(err, "failed to find AWS ACM Certificate summaries matching domain name", "domain-name", certificate.Spec.DomainName)
+		return nil, ctx.Error(err)
+	}
+
+	ownerTags := map[string]string{
+		"ManagedBy": "aeto",
+		"OwnerRef":  fmt.Sprintf("%s-%s", certificate.Kind, certificate.UID),
+	}
+
+	matchedArns := make([]string, 0)
+	for _, cs := range certs {
+		tags, err := r.AWS.ListAcmCertificateTagsByArn(ctx.Context, *cs.CertificateArn)
+		if err != nil {
+			var rnfe *acmtypes.ResourceNotFoundException
+			if errors.As(err, &rnfe) {
+				ctx.Log.Info("AWS ACM Certificate tags not found", "arn", *cs.CertificateArn)
+				return nil, ctx.RequeueIn(5, fmt.Sprintf("AWS ACM Certificate tags not found for arn %s", *cs.CertificateArn))
+			} else {
+				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate tags", "arn", *cs.CertificateArn)
+				return nil, ctx.Error(err)
+			}
+		}
+
+		tagsMatchOwner := true
+		for key, val := range ownerTags {
+			if v, ok := tags[key]; !ok || v != val {
+				tagsMatchOwner = false
+				break
+			}
+		}
+
+		if tagsMatchOwner {
+			matchedArns = append(matchedArns, *cs.CertificateArn)
+		}
+	}
+
+	if len(matchedArns) > 1 {
+		err := fmt.Errorf("multiple AWS ACM Certificates match the domain name %s and tags %v, unabled to determine certificate ownership", certificate.Spec.DomainName, ownerTags)
+		return nil, ctx.Error(err)
+	}
+
+	if len(matchedArns) == 1 {
+		ca = matchedArns[0]
+	}
+
+	// Merge owner and spec tags
+	certificateTags := make(map[string]string)
+	for key, value := range certificate.Spec.Tags {
+		certificateTags[key] = value
+	}
+	for key, value := range ownerTags {
+		certificateTags[key] = value
+	}
 
 	// No arn set, try and create it
 	if ca == "" {
 		ctx.Log.Info("creating a new AWS ACM Certificate", "domain-name", certificate.Spec.DomainName)
-		arn, err := r.newAcmCertificate(ctx, certificate)
+		arn, err := r.newAcmCertificate(ctx, certificate, certificateTags)
 		if err != nil {
 			ctx.Log.Error(err, "failed to create AWS ACM Certificate", "domain-name", certificate.Spec.DomainName)
 			return nil, ctx.Error(err)
@@ -130,15 +185,15 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 			var rnfe *acmtypes.ResourceNotFoundException
 			if errors.As(err, &rnfe) {
 				ctx.Log.Info("AWS ACM Certificate details not found", "arn", ca)
-				return nil, ctx.RequeueIn(5)
+				return nil, ctx.RequeueIn(5, fmt.Sprintf("AWS ACM Certificate details not found for arn %s", ca))
 			} else {
-				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate", "arn", ca)
+				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate details", "arn", ca)
 				return nil, ctx.Error(err)
 			}
 		}
 
 		ctx.Log.V(1).Info("reconciling tags for AWS ACM Certificate", "domain-name", cd.DomainName, "arn", cd.CertificateArn, "tags", certificate.Spec.Tags)
-		err = r.AWS.SetAcmCertificateTagsByArn(ctx.Context, ca, certificate.Spec.Tags)
+		err = r.AWS.SetAcmCertificateTagsByArn(ctx.Context, ca, certificateTags)
 		if err != nil {
 			ctx.Log.Error(err, "failed to reconcile tags for AWS ACM Certificate", "domain-name", certificate.Spec.DomainName, "arn", *cd.CertificateArn, "tags", certificate.Spec.Tags)
 			return nil, ctx.Error(err)
@@ -147,14 +202,13 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 		return &cd, ctx.Done()
 	}
 
-	// No arn set yet, retry in 15
-	return nil, ctx.RequeueIn(15)
+	return nil, ctx.RequeueIn(15, "no AWS ACM Certificate arn set")
 }
 
 func (r *CertificateReconciler) reconcileCertificateValidation(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, details *acmtypes.CertificateDetail) reconcile.Result {
 	if details == nil {
-		ctx.Log.V(1).Info("waiting for details on AWS ACM Certificate, skipping reconcile of certificate validation")
-		return ctx.RequeueIn(15)
+		ctx.Log.V(1).Info("waiting for details on AWS ACM Certificate to become available, skipping reconcile of certificate validation")
+		return ctx.RequeueIn(15, "waiting for details on AWS ACM Certificate to become available")
 	}
 
 	if certificate.Spec.Validation != nil {
@@ -180,8 +234,8 @@ func (r *CertificateReconciler) reconcileCertificateDnsValidationRecord(ctx reco
 	}
 
 	if dvo.ResourceRecord == nil {
-		ctx.Log.V(1).Info("AWS ACM Certificate domain validation option is missing it's resource record, retrying...", "domain-name", details.DomainName, "arn", details.CertificateArn)
-		return ctx.RequeueIn(5)
+		ctx.Log.V(1).Info("AWS ACM Certificate domain validation option is missing it's resource record", "domain-name", details.DomainName, "arn", details.CertificateArn)
+		return ctx.RequeueIn(5, "AWS ACM Certificate domain validation option is missing it's resource record")
 	}
 
 	recordSet := route53types.ResourceRecordSet{
@@ -203,8 +257,7 @@ func (r *CertificateReconciler) reconcileCertificateDnsValidationRecord(ctx reco
 	}
 
 	if details.Status == acmtypes.CertificateStatusPendingValidation {
-		// while we wait for validation to complete, requeue in shorter intervals
-		return ctx.RequeueIn(15)
+		return ctx.RequeueIn(15, "waiting for domain validation to complete")
 	}
 
 	return ctx.Done()
@@ -249,16 +302,23 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 				ctx.Log.Info("deleting Domain Validation record for AWS ACM Certificate", "arn", ca, "hosted-zone-id", certificate.Spec.Validation.Dns.HostedZonedId, "recordset", recordSet)
 				err := r.AWS.DeleteRoute53ResourceRecordSet(ctx.Context, certificate.Spec.Validation.Dns.HostedZonedId, recordSet, "deleting DNS validation record for AWS ACM Certificate")
 				if err != nil {
+					var oe *smithy.OperationError
+					if errors.As(err, &oe) {
+						if strings.Contains(oe.Error(), "NoSuchHostedZone") {
+							ctx.Log.Info("ignoring NoSuchHostedZone error", "message", oe.Error())
+							continue
+						}
+					}
+
 					var cbe *route53types.InvalidChangeBatch
 					if errors.As(err, &cbe) {
 						if strings.Contains(cbe.ErrorMessage(), "not found") {
-							ctx.Log.Info("ignoring change batch error", "error-message", cbe.ErrorMessage())
-						} else {
-							return ctx.Error(err)
+							ctx.Log.Info("ignoring InvalidChangeBatch error", "message", cbe.ErrorMessage())
+							continue
 						}
-					} else {
-						return ctx.Error(err)
 					}
+
+					return ctx.Error(err)
 				}
 			}
 		}
@@ -269,8 +329,11 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 	_, err = r.AWS.Acm.DeleteCertificate(ctx.Context, &acm.DeleteCertificateInput{
 		CertificateArn: aws.String(ca),
 	})
-	// TODO: Handle error for Certificate InUse or simply requeue
 	if err != nil {
+		var riue *acmtypes.ResourceInUseException
+		if errors.As(err, &riue) {
+			return ctx.RequeueIn(15, fmt.Sprintf("failed to delete AWS ACM Certificate %s as it is currently in use", ca))
+		}
 		ctx.Log.Error(err, "failed to delete AWS ACM Certificate", "arn", ca)
 		return ctx.Error(err)
 	}
@@ -278,37 +341,59 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 	return ctx.Done()
 }
 
-func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, cd *acmtypes.CertificateDetail) reconcile.Result {
+func (r *CertificateReconciler) reconcileStatus(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, cd *acmtypes.CertificateDetail, reconcileErr bool) reconcile.Result {
+	ready := metav1.ConditionFalse
+	inUse := metav1.ConditionFalse
 	if cd == nil {
 		certificate.Status.Arn = ""
-		certificate.Status.State = ""
-		certificate.Status.InUse = false
-		certificate.Status.Ready = false
+		certificate.Status.Status = "Unknown"
+		if reconcileErr {
+			certificate.Status.Status = "Error"
+		}
 	} else {
 		certificate.Status.Arn = *cd.CertificateArn
-		certificate.Status.State = string(cd.Status)
-		certificate.Status.InUse = len(cd.InUseBy) > 0
-		certificate.Status.Ready = *cd.CertificateArn != "" && cd.Status == acmtypes.CertificateStatusIssued
+		certificate.Status.Status = string(cd.Status)
+		if *cd.CertificateArn != "" && cd.Status == acmtypes.CertificateStatusIssued {
+			ready = metav1.ConditionTrue
+		}
+		if len(cd.InUseBy) > 0 {
+			inUse = metav1.ConditionTrue
+		}
 	}
 
-	ctx.Log.V(1).Info("updating Certificate status")
-	if err := r.Status().Update(ctx.Context, &certificate); err != nil {
-		ctx.Log.Error(err, "failed to update Certificate status")
+	readyCondition := metav1.Condition{
+		Type:               acmawsv1alpha1.ConditionTypeReady,
+		Status:             ready,
+		Reason:             certificate.Status.Status,
+		Message:            "",
+		ObservedGeneration: certificate.Generation,
+	}
+	apimeta.SetStatusCondition(&certificate.Status.Conditions, readyCondition)
+	inUseCondition := metav1.Condition{
+		Type:               acmawsv1alpha1.ConditionTypeInUse,
+		Status:             inUse,
+		Reason:             certificate.Status.Status,
+		Message:            "",
+		ObservedGeneration: certificate.Generation,
+	}
+	apimeta.SetStatusCondition(&certificate.Status.Conditions, inUseCondition)
+
+	if err := r.UpdateStatus(ctx, &certificate); err != nil {
 		return ctx.Error(err)
 	}
 
 	return ctx.Done()
 }
 
-func (r *CertificateReconciler) newAcmCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate) (arn string, err error) {
+func (r *CertificateReconciler) newAcmCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate, certificateTags map[string]string) (arn string, err error) {
 	req := &acm.RequestCertificateInput{
 		DomainName:       aws.String(certificate.Spec.DomainName),
-		IdempotencyToken: aws.String(strings.ReplaceAll(certificate.GetName(), "-", "")),
+		IdempotencyToken: aws.String(strings.ReplaceAll(certificate.GetNamespace()+"_"+certificate.GetName(), "-", "")),
 		ValidationMethod: acmtypes.ValidationMethodDns,
 	}
 
 	tags := make([]acmtypes.Tag, 0)
-	for key, value := range certificate.Spec.Tags {
+	for key, value := range certificateTags {
 		tags = append(tags, acmtypes.Tag{
 			Key:   aws.String(key),
 			Value: aws.String(value),

@@ -18,30 +18,21 @@ package core
 
 import (
 	"context"
-	"fmt"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	kreconcile "sigs.k8s.io/controller-runtime/pkg/reconcile" // Required for Watching
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
+	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
 	"github.com/kristofferahl/aeto/internal/pkg/config"
-	"github.com/kristofferahl/aeto/internal/pkg/convert"
-	"github.com/kristofferahl/aeto/internal/pkg/dynamic"
+	"github.com/kristofferahl/aeto/internal/pkg/eventstore"
+	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
-	templating "github.com/kristofferahl/aeto/internal/pkg/template"
+	domain "github.com/kristofferahl/aeto/internal/pkg/tenant"
 )
 
 const (
@@ -49,17 +40,12 @@ const (
 )
 
 var (
-	namespaceGVK = schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "Namespace",
-	}
+	serializer = eventstore.NewSerializer(domain.Events()...)
 )
 
 // TenantReconciler reconciles a Tenant object
 type TenantReconciler struct {
-	client.Client
-	Dynamic  dynamic.Clients
+	kubernetes.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
@@ -81,28 +67,44 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	rctx := reconcile.NewContext("tenant", req, log.FromContext(ctx))
 	rctx.Log.Info("reconciling")
 
-	tenant, err := r.getTenant(rctx)
-	if err != nil {
-		rctx.Log.Info("Tenant not found")
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
+	var tenant corev1alpha1.Tenant
+	if err := r.Get(rctx, req.NamespacedName, &tenant); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	rctx.Log.V(1).Info("found Tenant")
 
 	finalizer := reconcile.NewGenericFinalizer(TenantFinalizerName, func(c reconcile.Context) reconcile.Result {
-		tenant := tenant
-		if tenant.Status.Phase != corev1alpha1.TenantTerminating {
-			res := r.updateStatus(c, tenant, nil, nil, corev1alpha1.TenantTerminating)
-			if res.Error() {
-				return res
-			}
-			return c.RequeueIn(5)
+		streamId := eventstore.StreamId(req.NamespacedName.String())
+		store := eventstore.New(r.Client.GetClient(), rctx.Log, rctx.Context, serializer)
+		stream, err := store.Get(streamId)
+		if err != nil {
+			return rctx.Error(err)
 		}
-		return r.reconcileDelete(c, tenant)
+		if stream.Length() > 0 {
+			results := reconcile.ResultList{}
+
+			results = append(results, ReconcileStatus(rctx, r.Client, tenant, stream))
+			results = append(results, ReconcileOrphanedResources(rctx, r.Client, stream))
+			results = append(results, ReconcileDelete(rctx, r.Client, store, stream))
+
+			if results.AllDone() {
+				return rctx.Done()
+			}
+
+			rctx.Log.V(1).Info("event stream found, loading Tenant aggregate from history")
+			t := domain.NewTenantFromEvents(stream)
+
+			t.Delete()
+
+			_, err := store.Save(t)
+			if err != nil {
+				return rctx.Error(err)
+			} else {
+				return rctx.RequeueIn(5, "events might need to be processed in the finalizer")
+			}
+		}
+		return rctx.Done()
 	})
-	res, err := reconcile.WithFinalizer(r.Client, rctx, &tenant, finalizer)
+	res, err := reconcile.WithFinalizer(r.Client.GetClient(), rctx, &tenant, finalizer)
 	if reconcile.FinalizerInProgress(res, err) {
 		return *res, err
 	}
@@ -111,373 +113,89 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		Namespace: config.Operator.Namespace,
 		Name:      tenant.Blueprint(),
 	}
-	blueprint, err := r.getBlueprint(rctx, blueprintRef)
+	var blueprint corev1alpha1.Blueprint
+	if err := r.Get(rctx, blueprintRef, &blueprint); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	streamId := eventstore.StreamId(req.NamespacedName.String())
+	store := eventstore.New(r.Client.GetClient(), rctx.Log, rctx.Context, serializer)
+	stream, err := store.Get(streamId)
 	if err != nil {
-		rctx.Log.Info("Blueprint not found", "blueprint", blueprintRef.String())
 		return ctrl.Result{}, err
 	}
 
 	results := reconcile.ResultList{}
 
-	resourceSet, generateErrs := r.newResourceSet(rctx, tenant, blueprint)
-	if len(resourceSet.Spec.Groups) > 0 {
-		rs, result := r.applyResourceSet(rctx, resourceSet)
-		if !result.Error() {
-			resourceSet = *rs
-		}
-		results = append(results, result)
-	}
+	if stream.Length() == 0 {
+		sr := ReconcileStatus(rctx, r.Client, tenant, stream)
+		results = append(results, sr)
 
-	if len(generateErrs) > 0 {
-		for _, err = range generateErrs {
-			r.Recorder.Event(&tenant, "Warning", "ResourceSet", fmt.Sprintf("Failed to generate resource set for tenant; %s", err.Error()))
-		}
-		results = append(results, rctx.RequeueIn(15))
-	}
+		rctx.Log.V(1).Info("no events, creating new Tenant aggregate")
+		t := domain.NewTenant(streamId)
 
-	// Handle update of status
-	results = append(results, r.updateStatus(rctx, tenant, &blueprint, &resourceSet, corev1alpha1.TenantReconciling))
+		t.Create(tenant.Name, tenant.Namespace)
+		t.SetDisplayName(tenant.Spec.Name)
+		t.SetBlueprint(tenant, blueprint)
+
+		events, err := store.Save(t)
+		if err != nil {
+			results = append(results, rctx.Error(err))
+		} else if events > 0 {
+			results = append(results, rctx.RequeueIn(5, "new events needs processing by the controller"))
+		}
+	} else {
+		rctx.Log.V(1).Info("event stream found, loading Tenant aggregate from history")
+		t := domain.NewTenantFromEvents(stream)
+
+		results = append(results, ReconcileResourceSet(rctx, r.Client, stream))
+		results = append(results, ReconcileOrphanedResources(rctx, r.Client, stream))
+		results = append(results, ReconcileRequeueRequest(rctx, stream))
+		results = append(results, ReconcileStatus(rctx, r.Client, tenant, stream))
+
+		t.SetDisplayName(tenant.Spec.Name)
+		t.SetBlueprint(tenant, blueprint)
+
+		generator := domain.NewResourceGenerator(rctx, domain.ResourceGeneratoreServices{Client: r.Client})
+
+		err = t.GenerateResources(generator, tenant, blueprint)
+		if err != nil {
+			rctx.Log.Error(err, "failed to generate events from Blueprint")
+			results = append(results, rctx.Error(err))
+		}
+
+		events, err := store.Save(t)
+		if err != nil {
+			results = append(results, rctx.Error(err))
+		} else if events > 0 {
+			results = append(results, rctx.RequeueIn(5, "new events needs processing by the controller"))
+		}
+	}
 
 	return rctx.Complete(results...)
 }
 
-func (r *TenantReconciler) newResourceSet(ctx reconcile.Context, tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint) (resourceSet corev1alpha1.ResourceSet, errors []error) {
-	resourceSet = corev1alpha1.ResourceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        tenant.Name,
-			Namespace:   config.Operator.Namespace,
-			Labels:      blueprint.CommonLabels(tenant),
-			Annotations: blueprint.CommonAnnotations(tenant),
-		},
-		Spec: corev1alpha1.ResourceSetSpec{
-			Groups: make([]corev1alpha1.ResourceSetResourceGroup, 0),
-		},
-	}
-
-	for _, resourceGroup := range blueprint.Spec.Resources {
-		rsrg := corev1alpha1.ResourceSetResourceGroup{
-			Name:           resourceGroup.Name,
-			SourceTemplate: resourceGroup.Template,
-			Resources:      make([]corev1alpha1.EmbeddedResource, 0),
-		}
-
-		resources, err := r.generateResourcesFromBlueprintResourceGroup(ctx, resourceGroup, tenant, blueprint, resourceSet)
-		if err != nil {
-			errors = append(errors, err)
-			continue
-		}
-
-		for _, resource := range resources {
-			json, err := resource.MarshalJSON()
-			if err != nil {
-				errors = append(errors, err)
-				continue
-			}
-
-			rsrg.Resources = append(rsrg.Resources, corev1alpha1.EmbeddedResource{
-				RawExtension: runtime.RawExtension{
-					Raw: json,
-				},
-			})
-		}
-
-		resourceSet.Spec.Groups = append(resourceSet.Spec.Groups, rsrg)
-	}
-
-	ctx.Log.V(1).Info("generated new resource set", "resources", resourceSet.Spec.Groups)
-	return resourceSet, errors
-}
-
-func (r *TenantReconciler) generateResourcesFromBlueprintResourceGroup(rctx reconcile.Context, resourceGroup corev1alpha1.BlueprintResourceGroup, tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint, resourceSet corev1alpha1.ResourceSet) ([]*unstructured.Unstructured, error) {
-	rtRef := types.NamespacedName{
-		Namespace: config.Operator.Namespace,
-		Name:      resourceGroup.Template,
-	}
-	rt, err := r.getResourceTemplate(rctx, rtRef)
-	if err != nil {
-		rctx.Log.Info("ResourceTemplate not found")
-		return nil, err
-	}
-	rctx.Log.V(1).Info("found ResourceTemplate")
-
-	resolver := ValueResolver{
-		TenantName:        blueprint.Spec.ResourceNamePrefix + tenant.Name, // TODO: This should probably be done in a single place
-		TenantNamespace:   blueprint.Spec.ResourceNamePrefix + tenant.Name, // TODO: This should probably be done in a single place
-		OperatorNamespace: config.Operator.Namespace,
-		ResourceSet:       resourceSet,
-		Dynamic:           r.Dynamic,
-		Context:           rctx,
-	}
-
-	rctx.Log.V(1).Info("applying parameter overrides")
-	err = rt.Spec.Parameters.SetValues(resourceGroup.Parameters, resolver.Func)
-	if err != nil {
-		return nil, err
-	}
-
-	err = rt.Spec.Parameters.Validate()
-	if err != nil {
-		return nil, err
-	}
-
-	templateData := newTemplateData(tenant, blueprint, rt.Spec.Parameters)
-
-	rctx.Log.V(1).Info("building resources from resource template", "template", resourceGroup.Template)
-	allResources := make([]*unstructured.Unstructured, 0)
-
-	for _, raw := range rt.Spec.Raw {
-		resources, err := r.generateUnstructureResources(raw, templateData)
-		if err != nil {
-			return nil, err
-		}
-		allResources = append(allResources, resources...)
-	}
-
-	for _, resource := range rt.Spec.Resources {
-		resources, err := r.generateUnstructureResources(string(resource.Raw), templateData)
-		if err != nil {
-			return nil, err
-		}
-		allResources = append(allResources, resources...)
-	}
-
-	// TODO: Set field manager for ResourceSet?
-
-	rctx.Log.V(1).Info("applying name, namespace and common labels/annotations to resources", "template", resourceGroup.Template)
-	for _, resource := range allResources {
-		resourceName := ""
-		resourceNamespace := ""
-
-		switch rt.Spec.Rules.Namespace {
-		case corev1alpha1.ResourceNamespaceOperator:
-			resourceNamespace = config.Operator.Namespace
-		case corev1alpha1.ResourceNamespaceTenant:
-			resourceNamespace = blueprint.Spec.ResourceNamePrefix + tenant.Name
-		case corev1alpha1.ResourceNamespaceKeep:
-			resourceNamespace = resource.GetNamespace()
-			if resource.GroupVersionKind() == namespaceGVK {
-				resourceNamespace = resource.GetName()
-			}
-		}
-
-		switch rt.Spec.Rules.Name {
-		case corev1alpha1.ResourceNameTenant:
-			resourceName = blueprint.Spec.ResourceNamePrefix + tenant.Name
-		case corev1alpha1.ResourceNameKeep:
-			resourceName = resource.GetName()
-		}
-
-		if resource.GroupVersionKind() == namespaceGVK {
-			resource.SetName(resourceNamespace)
-		} else {
-			resource.SetName(resourceName)
-			resource.SetNamespace(resourceNamespace)
-		}
-
-		// TODO: Override existing labels and annotations if they exist?
-		resource.SetLabels(blueprint.CommonLabels(tenant))
-		resource.SetAnnotations(blueprint.CommonAnnotations(tenant))
-
-		rctx.Log.V(1).Info("all changes applied to resource", "template", resourceGroup.Template, "resource", resource.UnstructuredContent())
-	}
-
-	return allResources, nil
-}
-
-func newTemplateData(tenant corev1alpha1.Tenant, blueprint corev1alpha1.Blueprint, parameters []*corev1alpha1.Parameter) templating.Data {
-	return templating.Data{
-		Key:                tenant.Name,
-		ResourceNamePrefix: blueprint.Spec.ResourceNamePrefix,
-		Name:               tenant.Spec.Name,
-		Namespaces: templating.Namespaces{
-			Tenant:   blueprint.Spec.ResourceNamePrefix + tenant.Name,
-			Operator: config.Operator.Namespace,
-		},
-		Labels:      blueprint.CommonLabels(tenant),
-		Annotations: blueprint.CommonAnnotations(tenant),
-		Parameters:  parameters,
-	}
-}
-
-func (r *TenantReconciler) generateUnstructureResources(json string, templateData templating.Data) ([]*unstructured.Unstructured, error) {
-	allResources := make([]*unstructured.Unstructured, 0)
-
-	template, err := templating.NewYamlTemplate(json, templating.InputFormatJson)
-	if err != nil {
-		return nil, err
-	}
-
-	templated, err := template.Execute(templateData)
-	if err != nil {
-		return nil, err
-	}
-
-	docs, err := convert.YamlToStringSlice(templated)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, doc := range docs {
-		templatedResources, err := convert.YamlToUnstructuredSlice(doc)
-		if err != nil {
-			return nil, err
-		}
-
-		allResources = append(allResources, templatedResources...)
-	}
-
-	return allResources, nil
-}
-
-func (r *TenantReconciler) getTenant(ctx reconcile.Context) (corev1alpha1.Tenant, error) {
-	var tenant corev1alpha1.Tenant
-	if err := r.Get(ctx.Context, ctx.Request.NamespacedName, &tenant); err != nil {
-		return corev1alpha1.Tenant{}, err
-	}
-	return tenant, nil
-}
-
 func (r *TenantReconciler) getBlueprint(ctx reconcile.Context, nn types.NamespacedName) (corev1alpha1.Blueprint, error) {
 	var blueprint corev1alpha1.Blueprint
-	if err := r.Get(ctx.Context, nn, &blueprint); err != nil {
+	if err := r.Get(ctx, nn, &blueprint); err != nil {
 		return corev1alpha1.Blueprint{}, err
 	}
 	return blueprint, nil
 }
 
-func (r *TenantReconciler) getResourceTemplate(ctx reconcile.Context, nn types.NamespacedName) (corev1alpha1.ResourceTemplate, error) {
-	var rt corev1alpha1.ResourceTemplate
-	if err := r.Get(ctx.Context, client.ObjectKey{
-		Name:      nn.Name,
-		Namespace: nn.Namespace,
-	}, &rt); err != nil {
-		return corev1alpha1.ResourceTemplate{}, err
-	}
-	return rt, nil
-}
-
-func (r *TenantReconciler) getResourceSet(ctx reconcile.Context, nn types.NamespacedName) (*corev1alpha1.ResourceSet, error) {
-	var rs corev1alpha1.ResourceSet
-	if err := r.Get(ctx.Context, client.ObjectKey{
-		Name:      nn.Name,
-		Namespace: nn.Namespace,
-	}, &rs); err != nil {
-		return nil, err
-	}
-	return &rs, nil
-}
-
-func (r *TenantReconciler) applyResourceSet(ctx reconcile.Context, resourceSet corev1alpha1.ResourceSet) (*corev1alpha1.ResourceSet, reconcile.Result) {
-	existing, err := r.getResourceSet(ctx, resourceSet.NamespacedName())
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return nil, ctx.Error(err)
-		}
-
-		ctx.Log.Info("ResourceSet not found, creating", "resourceset", resourceSet.NamespacedName())
-		err := r.Create(ctx.Context, &resourceSet)
-		if err != nil {
-			ctx.Log.Error(err, "failed to create ResourceSet", "resourceset", resourceSet.NamespacedName())
-			return nil, ctx.Error(err)
-		}
-
-		return &resourceSet, ctx.Done()
-	}
-
-	if existing != nil {
-		existing.Spec.Groups = resourceSet.Spec.Groups
-		ctx.Log.V(1).Info("updating ResourceSet", "resourceset", resourceSet.NamespacedName())
-		err := r.Update(ctx.Context, existing)
-		if err != nil {
-			ctx.Log.Error(err, "failed to update ResourceSet", "resourceset", resourceSet.NamespacedName())
-			return nil, ctx.Error(err)
-		}
-	}
-
-	return existing, ctx.Done()
-}
-
-func (r *TenantReconciler) reconcileDelete(ctx reconcile.Context, tenant corev1alpha1.Tenant) reconcile.Result {
-	nn := types.NamespacedName{
-		Name:      tenant.Name,
-		Namespace: config.Operator.Namespace,
-	}
-	resourceSet, err := r.getResourceSet(ctx, nn)
-	if err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			ctx.Log.Error(err, "failed to fetch resource set", "resource-set", nn.String())
-			return ctx.Error(err)
-		}
-	}
-
-	if resourceSet != nil {
-		ctx.Log.V(1).Info("deleting resource set", "resource-set", resourceSet.NamespacedName())
-		err = r.Delete(ctx.Context, resourceSet, &client.DeleteOptions{})
-		if err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				ctx.Log.Error(err, "failed to delete", "resource-set", resourceSet.NamespacedName())
-				return ctx.Error(err)
-			}
-			ctx.Log.V(1).Info("resource set deleted", "resource-set", resourceSet.NamespacedName())
-		}
-		return ctx.RequeueIn(5)
-	}
-
-	ctx.Log.V(1).Info("all resources belonging to Tenant deleted")
-	return ctx.Done()
-}
-
-func (r *TenantReconciler) updateStatus(ctx reconcile.Context, tenant corev1alpha1.Tenant, blueprint *corev1alpha1.Blueprint, resourceSet *corev1alpha1.ResourceSet, phase corev1alpha1.TenantPhase) reconcile.Result {
-	tenant.Status.Phase = phase
-
-	if blueprint != nil {
-		tenant.Status.Blueprint = blueprint.NamespacedName().String() + " v" + blueprint.ResourceVersion
-	}
-
-	if resourceSet != nil {
-		tenant.Status.ResourceSet = resourceSet.NamespacedName().String() + " v" + resourceSet.ResourceVersion
-	}
-
-	ctx.Log.V(1).Info("updating Tenant status")
-	if err := r.Status().Update(ctx.Context, &tenant); err != nil {
-		ctx.Log.Error(err, "failed to update Tenant status")
-		return ctx.Error(err)
-	}
-
-	return ctx.Done()
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &eventv1alpha1.EventStreamChunk{}, eventstore.StreamIdFieldIndexKey, func(o client.Object) []string {
+		chunk := o.(*eventv1alpha1.EventStreamChunk)
+		if chunk.Spec.StreamId == "" {
+			return nil
+		}
+		return []string{chunk.Spec.StreamId}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.Tenant{}).
-		Watches(
-			&source.Kind{Type: &corev1alpha1.ResourceSet{}},
-			handler.EnqueueRequestsFromMapFunc(r.findTenantForResourceSet),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-		).
 		Complete(r)
-}
-
-func (r *TenantReconciler) findTenantForResourceSet(resourceSet client.Object) []kreconcile.Request {
-	tenantList := &corev1alpha1.TenantList{}
-	// TODO: Implement paging
-	// TODO: Allow operator to define namespaces to watch for tenants
-	options := &client.ListOptions{} // Fetch from all namespaces
-	err := r.List(context.TODO(), tenantList, options)
-	if err != nil {
-		return []kreconcile.Request{}
-	}
-
-	requests := make([]kreconcile.Request, 0)
-	for _, item := range tenantList.Items {
-		requests = append(requests, kreconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      item.GetName(),
-				Namespace: item.GetNamespace(),
-			},
-		})
-
-	}
-	return requests
 }

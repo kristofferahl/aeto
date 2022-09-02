@@ -1,0 +1,92 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: eventstreamchunks.event.aeto.net
+spec:
+  group: event.aeto.net
+  names:
+    kind: EventStreamChunk
+    listKind: EventStreamChunkList
+    plural: eventstreamchunks
+    singular: eventstreamchunk
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.id
+      name: Id
+      type: string
+    - jsonPath: .spec.version
+      name: Version
+      type: string
+    - jsonPath: .spec.ts
+      name: Timestamp
+      priority: 1
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: EventStreamChunk is the Schema for the eventstreamchunks API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EventStreamChunkSpec defines the desired state of EventStreamChunk
+            properties:
+              events:
+                description: Events holds the events of the stream chunk
+                items:
+                  description: EventRecord defines an event
+                  properties:
+                    raw:
+                      description: Raw defines the raw data of the event
+                      type: string
+                  required:
+                  - raw
+                  type: object
+                type: array
+              id:
+                description: StreamId defines the ID of the stream
+                type: string
+              ts:
+                description: Timestamp is point in time when the chunk was created
+                type: string
+              version:
+                description: StreamVersion is the version of the stream at the point
+                  when it chunk was created
+                format: int64
+                type: integer
+            required:
+            - events
+            - id
+            - ts
+            - version
+            type: object
+          status:
+            description: EventStreamChunkStatus defines the observed state of EventStreamChunk
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

@@ -54,6 +54,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Zap Log level to use when running make run
+# Set "ZAP_LOG_LEVEL = 2" to enable trace logging
 ZAP_LOG_LEVEL = debug
 
 # Run Zap in development mode

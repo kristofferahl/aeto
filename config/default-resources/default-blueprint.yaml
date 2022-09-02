@@ -22,7 +22,7 @@ spec:
       template: default-route53-hostedzone-template
       parameters:
         - name: ParentHostedZoneName
-          value: aeto.net
+          value: aeto.dotnetmentor.se
     - name: certificate
       template: default-acm-certificate-template
       parameters:
@@ -30,7 +30,7 @@ spec:
           valueFrom:
             blueprint:
               resourceGroup: hosted_zone
-              jsonPath: .resources[0].spec.name
+              jsonPath: .resources[0].embedded.spec.name
         - name: HostedZoneId
           valueFrom:
             resource:
@@ -45,9 +45,9 @@ spec:
         - name: IngressClass
           value: traefik
         - name: ExternalDnsTarget
-          value: loadbalancer.aeto.net
+          value: loadbalancer.aeto.dotnetmentor.se
         - name: IngressHost
           valueFrom:
             blueprint:
               resourceGroup: hosted_zone
-              jsonPath: .resources[0].spec.name
+              jsonPath: .resources[0].embedded.spec.name

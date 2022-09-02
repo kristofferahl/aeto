@@ -24,6 +24,12 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	ConditionTypeInUse  string = "InUse"
+	ConditionTypeReady  string = "Ready"
+	ConditionTypeInSync string = "InSync"
+)
+
 // CertificateSpec defines the desired state of Certificate
 type CertificateSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -64,23 +70,20 @@ type CertificateStatus struct {
 	// Arn is the ARN of the AWS ACM Certificate.
 	Arn string `json:"arn,omitempty"`
 
-	// State is the current status of the AWS ACM Certificate.
-	State string `json:"state,omitempty"`
+	// Status is the current status of the AWS ACM Certificate.
+	Status string `json:"status,omitempty"`
 
-	// InUse declares if the AWS ACM Certificate is in use.
-	InUse bool `json:"inUse,omitempty"`
-
-	// Ready is true when the resource is created and valid
-	Ready bool `json:"ready,omitempty"`
+	// Conditions represent the latest available observations of the ResourceSet state.
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="DomainName",priority=0,type=string,JSONPath=`.spec.domainName`
-//+kubebuilder:printcolumn:name="State",priority=1,type=string,JSONPath=`.status.state`
-//+kubebuilder:printcolumn:name="InUse",priority=1,type=boolean,JSONPath=`.status.inUse`
 //+kubebuilder:printcolumn:name="Arn",priority=1,type=string,JSONPath=`.status.arn`
-//+kubebuilder:printcolumn:name="Ready",priority=0,type=boolean,JSONPath=`.status.ready`
+//+kubebuilder:printcolumn:name="Status",priority=1,type=string,JSONPath=`.status.status`
+//+kubebuilder:printcolumn:name="InUse",priority=1,type="string",JSONPath=`.status.conditions[?(@.type == "InUse")].status`
+//+kubebuilder:printcolumn:name="Ready",priority=0,type="string",JSONPath=`.status.conditions[?(@.type == "Ready")].status`
 
 // Certificate is the Schema for the certificates API
 type Certificate struct {

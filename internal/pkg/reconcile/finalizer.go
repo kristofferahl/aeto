@@ -34,9 +34,9 @@ func WithFinalizer(client client.Client, ctx Context, obj client.Object, finaliz
 			ctx.Log.Info(fmt.Sprintf("%s is being deleted, finalizer is present", objTypeName), "finalizer", finalizer.Name())
 
 			result := finalizer.Handler()(ctx)
-			if result.Requeue() {
-				res, err := result.AsCtrlResultError()
-				ctx.Log.V(1).Info(fmt.Sprintf("finalizer requires requeue for %s", objTypeName), "result", res, "error", err, "finalizer", finalizer.Name())
+			if result.RequiresRequeue() {
+				ctx.Log.V(1).Info(fmt.Sprintf("finalizer requires requeue for %s", objTypeName), "reason", result.requeueReason, "result", result, "finalizer", finalizer.Name())
+				res, err := result.asCtrlResultError()
 				return &res, err
 			}
 

@@ -36,9 +36,10 @@ func (ctx Context) Done() Result {
 }
 
 // RequeueIn creates a ReconcileResult that will trigger a requeue in 'n' seconds
-func (ctx Context) RequeueIn(seconds int) Result {
+func (ctx Context) RequeueIn(seconds int, reason string) Result {
 	return Result{
-		RequeueIn: time.Duration(seconds) * time.Second,
+		requeueAfter:  time.Duration(seconds) * time.Second,
+		requeueReason: reason,
 	}
 }
 
@@ -52,11 +53,15 @@ func (ctx Context) Error(err error) Result {
 // Complete handles multiple reconcile results and triggers a requeue based on the results
 func (ctx Context) Complete(results ...Result) (ctrl.Result, error) {
 	for _, result := range results {
-		if result.Requeue() {
-			return result.RequeueRequest(ctx)
+		if result.RequiresRequeue() {
+			if !result.Error() {
+				ctx.Log.Info("reconciliation in progress", "requeue-after", result.requeueAfter, "reason", result.requeueReason)
+			}
+
+			return result.asCtrlResultError()
 		}
 	}
 
-	ctx.Log.Info("finished reconciliation", "requeue-interval", config.Operator.ReconcileInterval)
+	ctx.Log.Info("finished reconciliation", "requeue-after", config.Operator.ReconcileInterval)
 	return ctrl.Result{RequeueAfter: config.Operator.ReconcileInterval}, nil
 }
