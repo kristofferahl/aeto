@@ -59,6 +59,10 @@ spec:
                 description: DomainName is the fully qualified domain name (fqdn)
                   used to create the AWS ACM Certificate.
                 type: string
+              region:
+                description: Region where to create the AWS resource. If not specified,
+                  the value of AWS_REGION is used.
+                type: string
               tags:
                 additionalProperties:
                   type: string

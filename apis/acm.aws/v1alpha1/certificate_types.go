@@ -35,6 +35,10 @@ type CertificateSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// Region where to create the AWS resource. If not specified, the value of AWS_REGION is used.
+	// +kubebuilder:validation:Optional
+	Region string `json:"region"`
+
 	// DomainName is the fully qualified domain name (fqdn) used to create the AWS ACM Certificate.
 	// +kubebuilder:validation:Required
 	DomainName string `json:"domainName"`

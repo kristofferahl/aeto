@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
@@ -17,8 +18,21 @@ import (
 // Clients wrapper for AWS
 type Clients struct {
 	Log     logr.Logger
-	Acm     *acm.Client
+	Config  aws.Config
 	Route53 *route53.Client
+}
+
+func (c Clients) Region(region string) string {
+	if region != "" {
+		return region
+	}
+	return c.Config.Region
+}
+
+func (c Clients) Acm(region string) *acm.Client {
+	region = c.Region(region)
+	cfg, _ := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	return acm.NewFromConfig(cfg)
 }
 
 var unescaper = strings.NewReplacer(`\057`, "/", `\052`, "*")
@@ -28,12 +42,12 @@ type UniqueConstraintException struct {
 }
 
 func (e *UniqueConstraintException) Error() string {
-	return "boom"
+	return e.message
 }
 
 // FindOneAcmCertificateByDomainName returns the first matching ACM Certificate by domain name
-func (c Clients) FindOneAcmCertificateByDomainName(ctx context.Context, domainName string) (*acmtypes.CertificateSummary, error) {
-	items, err := c.ListAcmCertificates(ctx)
+func (c Clients) FindOneAcmCertificateByDomainName(ctx context.Context, region string, domainName string) (*acmtypes.CertificateSummary, error) {
+	items, err := c.ListAcmCertificates(ctx, region)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +75,8 @@ func (c Clients) FindOneAcmCertificateByDomainName(ctx context.Context, domainNa
 }
 
 // FindAcmCertificatesByDomainName returns the first matching ACM Certificate by domain name
-func (c Clients) FindAcmCertificatesByDomainName(ctx context.Context, domainName string) ([]acmtypes.CertificateSummary, error) {
-	items, err := c.ListAcmCertificates(ctx)
+func (c Clients) FindAcmCertificatesByDomainName(ctx context.Context, region string, domainName string) ([]acmtypes.CertificateSummary, error) {
+	items, err := c.ListAcmCertificates(ctx, region)
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +94,8 @@ func (c Clients) FindAcmCertificatesByDomainName(ctx context.Context, domainName
 }
 
 // GetAcmCertificateDetailsByArn returns ACM Certificate details by ARN
-func (c Clients) GetAcmCertificateDetailsByArn(ctx context.Context, arn string) (acmtypes.CertificateDetail, error) {
-	res, err := c.Acm.DescribeCertificate(ctx, &acm.DescribeCertificateInput{
+func (c Clients) GetAcmCertificateDetailsByArn(ctx context.Context, region string, arn string) (acmtypes.CertificateDetail, error) {
+	res, err := c.Acm(region).DescribeCertificate(ctx, &acm.DescribeCertificateInput{
 		CertificateArn: aws.String(arn),
 	})
 	if err != nil {
@@ -92,10 +106,10 @@ func (c Clients) GetAcmCertificateDetailsByArn(ctx context.Context, arn string) 
 }
 
 // ListAcmCertificates returns all ACM Certificates
-func (c Clients) ListAcmCertificates(ctx context.Context) ([]acmtypes.CertificateSummary, error) {
+func (c Clients) ListAcmCertificates(ctx context.Context, region string) ([]acmtypes.CertificateSummary, error) {
 	items := make([]acmtypes.CertificateSummary, 0)
 
-	paginator := acm.NewListCertificatesPaginator(c.Acm, &acm.ListCertificatesInput{
+	paginator := acm.NewListCertificatesPaginator(c.Acm(region), &acm.ListCertificatesInput{
 		MaxItems: aws.Int32(5),
 	})
 	for paginator.HasMorePages() {
@@ -110,8 +124,9 @@ func (c Clients) ListAcmCertificates(ctx context.Context) ([]acmtypes.Certificat
 }
 
 // SetAcmCertificateTagsByArn adds, removes and updates tags for the ACM Certificate by ARN
-func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, arn string, tags map[string]string) error {
-	tagsRes, err := c.Acm.ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{
+func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, region string, arn string, tags map[string]string) error {
+	rc := c.Acm(region)
+	tagsRes, err := rc.ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{
 		CertificateArn: aws.String(arn),
 	})
 	if err != nil {
@@ -139,7 +154,7 @@ func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, arn string, tag
 	}
 
 	if len(remove) > 0 {
-		_, err := c.Acm.RemoveTagsFromCertificate(ctx, &acm.RemoveTagsFromCertificateInput{
+		_, err := rc.RemoveTagsFromCertificate(ctx, &acm.RemoveTagsFromCertificateInput{
 			CertificateArn: aws.String(arn),
 			Tags:           remove,
 		})
@@ -149,7 +164,7 @@ func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, arn string, tag
 	}
 
 	if len(add) > 0 {
-		_, err := c.Acm.AddTagsToCertificate(ctx, &acm.AddTagsToCertificateInput{
+		_, err := rc.AddTagsToCertificate(ctx, &acm.AddTagsToCertificateInput{
 			CertificateArn: aws.String(arn),
 			Tags:           add,
 		})
@@ -162,9 +177,9 @@ func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, arn string, tag
 }
 
 // ListAcmCertificateTagsByArn lists tags for the ACM Certificate by ARN
-func (c Clients) ListAcmCertificateTagsByArn(ctx context.Context, arn string) (tags map[string]string, err error) {
+func (c Clients) ListAcmCertificateTagsByArn(ctx context.Context, region string, arn string) (tags map[string]string, err error) {
 	tags = make(map[string]string)
-	tagsRes, err := c.Acm.ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{
+	tagsRes, err := c.Acm(region).ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{
 		CertificateArn: aws.String(arn),
 	})
 	if err != nil {

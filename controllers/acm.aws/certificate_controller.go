@@ -111,9 +111,9 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, certificate acmawsv1alpha1.Certificate) (*acmtypes.CertificateDetail, reconcile.Result) {
 	ca := ""
 
-	certs, err := r.AWS.FindAcmCertificatesByDomainName(ctx.Context, certificate.Spec.DomainName)
+	certs, err := r.AWS.FindAcmCertificatesByDomainName(ctx.Context, certificate.Spec.Region, certificate.Spec.DomainName)
 	if err != nil {
-		ctx.Log.Error(err, "failed to find AWS ACM Certificate summaries matching domain name", "domain-name", certificate.Spec.DomainName)
+		ctx.Log.Error(err, "failed to find AWS ACM Certificate summaries matching domain name", "region", r.AWS.Region(certificate.Spec.Region), "domain-name", certificate.Spec.DomainName)
 		return nil, ctx.Error(err)
 	}
 
@@ -124,14 +124,14 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 
 	matchedArns := make([]string, 0)
 	for _, cs := range certs {
-		tags, err := r.AWS.ListAcmCertificateTagsByArn(ctx.Context, *cs.CertificateArn)
+		tags, err := r.AWS.ListAcmCertificateTagsByArn(ctx.Context, certificate.Spec.Region, *cs.CertificateArn)
 		if err != nil {
 			var rnfe *acmtypes.ResourceNotFoundException
 			if errors.As(err, &rnfe) {
-				ctx.Log.Info("AWS ACM Certificate tags not found", "arn", *cs.CertificateArn)
+				ctx.Log.Info("AWS ACM Certificate tags not found", "region", r.AWS.Region(certificate.Spec.Region), "arn", *cs.CertificateArn)
 				return nil, ctx.RequeueIn(5, fmt.Sprintf("AWS ACM Certificate tags not found for arn %s", *cs.CertificateArn))
 			} else {
-				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate tags", "arn", *cs.CertificateArn)
+				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate tags", "region", r.AWS.Region(certificate.Spec.Region), "arn", *cs.CertificateArn)
 				return nil, ctx.Error(err)
 			}
 		}
@@ -169,10 +169,10 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 
 	// No arn set, try and create it
 	if ca == "" {
-		ctx.Log.Info("creating a new AWS ACM Certificate", "domain-name", certificate.Spec.DomainName)
+		ctx.Log.Info("creating a new AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "domain-name", certificate.Spec.DomainName)
 		arn, err := r.newAcmCertificate(ctx, certificate, certificateTags)
 		if err != nil {
-			ctx.Log.Error(err, "failed to create AWS ACM Certificate", "domain-name", certificate.Spec.DomainName)
+			ctx.Log.Error(err, "failed to create AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "domain-name", certificate.Spec.DomainName)
 			return nil, ctx.Error(err)
 		}
 		ca = arn
@@ -180,22 +180,22 @@ func (r *CertificateReconciler) reconcileCertificate(ctx reconcile.Context, cert
 
 	// Arn set, get certificate and set tags
 	if ca != "" {
-		cd, err := r.AWS.GetAcmCertificateDetailsByArn(ctx.Context, ca)
+		cd, err := r.AWS.GetAcmCertificateDetailsByArn(ctx.Context, certificate.Spec.Region, ca)
 		if err != nil {
 			var rnfe *acmtypes.ResourceNotFoundException
 			if errors.As(err, &rnfe) {
 				ctx.Log.Info("AWS ACM Certificate details not found", "arn", ca)
 				return nil, ctx.RequeueIn(5, fmt.Sprintf("AWS ACM Certificate details not found for arn %s", ca))
 			} else {
-				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate details", "arn", ca)
+				ctx.Log.Error(err, "failed to fetch AWS ACM Certificate details", "region", r.AWS.Region(certificate.Spec.Region), "arn", ca)
 				return nil, ctx.Error(err)
 			}
 		}
 
-		ctx.Log.V(1).Info("reconciling tags for AWS ACM Certificate", "domain-name", cd.DomainName, "arn", cd.CertificateArn, "tags", certificate.Spec.Tags)
-		err = r.AWS.SetAcmCertificateTagsByArn(ctx.Context, ca, certificateTags)
+		ctx.Log.V(1).Info("reconciling tags for AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "domain-name", cd.DomainName, "arn", cd.CertificateArn, "tags", certificate.Spec.Tags)
+		err = r.AWS.SetAcmCertificateTagsByArn(ctx.Context, certificate.Spec.Region, ca, certificateTags)
 		if err != nil {
-			ctx.Log.Error(err, "failed to reconcile tags for AWS ACM Certificate", "domain-name", certificate.Spec.DomainName, "arn", *cd.CertificateArn, "tags", certificate.Spec.Tags)
+			ctx.Log.Error(err, "failed to reconcile tags for AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "domain-name", certificate.Spec.DomainName, "arn", *cd.CertificateArn, "tags", certificate.Spec.Tags)
 			return nil, ctx.Error(err)
 		}
 
@@ -216,7 +216,7 @@ func (r *CertificateReconciler) reconcileCertificateValidation(ctx reconcile.Con
 			return r.reconcileCertificateDnsValidationRecord(ctx, certificate.Spec.Validation.Dns.HostedZonedId, *details)
 		}
 
-		ctx.Log.Info("unhandled status for AWS ACM Certificate", "status", details.Status, "arn", *details.CertificateArn)
+		ctx.Log.Info("unhandled status for AWS ACM Certificate", "status", details.Status, "region", r.AWS.Region(certificate.Spec.Region), "arn", *details.CertificateArn)
 	}
 
 	return ctx.Done()
@@ -271,14 +271,14 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 		return ctx.Done()
 	}
 
-	cd, err := r.AWS.GetAcmCertificateDetailsByArn(ctx.Context, ca)
+	cd, err := r.AWS.GetAcmCertificateDetailsByArn(ctx.Context, certificate.Spec.Region, ca)
 	if err != nil {
 		var rnfe *acmtypes.ResourceNotFoundException
 		if errors.As(err, &rnfe) {
-			ctx.Log.Info("AWS ACM Certificate details not found", "arn", ca)
+			ctx.Log.Info("AWS ACM Certificate details not found", "region", r.AWS.Region(certificate.Spec.Region), "arn", ca)
 			return ctx.Done()
 		} else {
-			ctx.Log.Error(err, "failed to fetch AWS ACM Certificate", "arn", ca)
+			ctx.Log.Error(err, "failed to fetch AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "arn", ca)
 			return ctx.Error(err)
 		}
 	}
@@ -299,7 +299,7 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 					TTL: aws.Int64(300),
 				}
 
-				ctx.Log.Info("deleting Domain Validation record for AWS ACM Certificate", "arn", ca, "hosted-zone-id", certificate.Spec.Validation.Dns.HostedZonedId, "recordset", recordSet)
+				ctx.Log.Info("deleting Domain Validation record for AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "arn", ca, "hosted-zone-id", certificate.Spec.Validation.Dns.HostedZonedId, "recordset", recordSet)
 				err := r.AWS.DeleteRoute53ResourceRecordSet(ctx.Context, certificate.Spec.Validation.Dns.HostedZonedId, recordSet, "deleting DNS validation record for AWS ACM Certificate")
 				if err != nil {
 					var oe *smithy.OperationError
@@ -325,8 +325,8 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 	}
 
 	// Certificate
-	ctx.Log.Info("deleting AWS ACM Certificate", "arn", ca)
-	_, err = r.AWS.Acm.DeleteCertificate(ctx.Context, &acm.DeleteCertificateInput{
+	ctx.Log.Info("deleting AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "arn", ca)
+	_, err = r.AWS.Acm(certificate.Spec.Region).DeleteCertificate(ctx.Context, &acm.DeleteCertificateInput{
 		CertificateArn: aws.String(ca),
 	})
 	if err != nil {
@@ -334,7 +334,7 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 		if errors.As(err, &riue) {
 			return ctx.RequeueIn(15, fmt.Sprintf("failed to delete AWS ACM Certificate %s as it is currently in use", ca))
 		}
-		ctx.Log.Error(err, "failed to delete AWS ACM Certificate", "arn", ca)
+		ctx.Log.Error(err, "failed to delete AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "arn", ca)
 		return ctx.Error(err)
 	}
 
@@ -403,7 +403,7 @@ func (r *CertificateReconciler) newAcmCertificate(ctx reconcile.Context, certifi
 		req.Tags = tags
 	}
 
-	res, err := r.AWS.Acm.RequestCertificate(ctx.Context, req)
+	res, err := r.AWS.Acm(certificate.Spec.Region).RequestCertificate(ctx.Context, req)
 	if err != nil {
 		return "", err
 	}
