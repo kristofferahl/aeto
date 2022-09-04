@@ -25,7 +25,6 @@ import (
 	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/acm"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -156,7 +155,6 @@ func main() {
 	awsClients := aws.Clients{
 		Log:     ctrl.Log.WithName("aws-client"),
 		Config:  awsConfig,
-		Acm:     acm.NewFromConfig(awsConfig),
 		Route53: route53.NewFromConfig(awsConfig),
 	}
 

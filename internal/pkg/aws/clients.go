@@ -19,7 +19,6 @@ import (
 type Clients struct {
 	Log     logr.Logger
 	Config  aws.Config
-	Acm     *acm.Client
 	Route53 *route53.Client
 }
 
@@ -30,13 +29,8 @@ func (c Clients) Region(region string) string {
 	return c.Config.Region
 }
 
-func (c Clients) RegionalAcm(region string) *acm.Client {
+func (c Clients) Acm(region string) *acm.Client {
 	region = c.Region(region)
-
-	if region == "" {
-		return c.Acm
-	}
-
 	cfg, _ := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
 	return acm.NewFromConfig(cfg)
 }
@@ -101,7 +95,7 @@ func (c Clients) FindAcmCertificatesByDomainName(ctx context.Context, region str
 
 // GetAcmCertificateDetailsByArn returns ACM Certificate details by ARN
 func (c Clients) GetAcmCertificateDetailsByArn(ctx context.Context, region string, arn string) (acmtypes.CertificateDetail, error) {
-	res, err := c.RegionalAcm(region).DescribeCertificate(ctx, &acm.DescribeCertificateInput{
+	res, err := c.Acm(region).DescribeCertificate(ctx, &acm.DescribeCertificateInput{
 		CertificateArn: aws.String(arn),
 	})
 	if err != nil {
@@ -115,7 +109,7 @@ func (c Clients) GetAcmCertificateDetailsByArn(ctx context.Context, region strin
 func (c Clients) ListAcmCertificates(ctx context.Context, region string) ([]acmtypes.CertificateSummary, error) {
 	items := make([]acmtypes.CertificateSummary, 0)
 
-	paginator := acm.NewListCertificatesPaginator(c.RegionalAcm(region), &acm.ListCertificatesInput{
+	paginator := acm.NewListCertificatesPaginator(c.Acm(region), &acm.ListCertificatesInput{
 		MaxItems: aws.Int32(5),
 	})
 	for paginator.HasMorePages() {
@@ -131,7 +125,7 @@ func (c Clients) ListAcmCertificates(ctx context.Context, region string) ([]acmt
 
 // SetAcmCertificateTagsByArn adds, removes and updates tags for the ACM Certificate by ARN
 func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, region string, arn string, tags map[string]string) error {
-	rc := c.RegionalAcm(region)
+	rc := c.Acm(region)
 	tagsRes, err := rc.ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{
 		CertificateArn: aws.String(arn),
 	})
@@ -185,7 +179,7 @@ func (c Clients) SetAcmCertificateTagsByArn(ctx context.Context, region string, 
 // ListAcmCertificateTagsByArn lists tags for the ACM Certificate by ARN
 func (c Clients) ListAcmCertificateTagsByArn(ctx context.Context, region string, arn string) (tags map[string]string, err error) {
 	tags = make(map[string]string)
-	tagsRes, err := c.RegionalAcm(region).ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{
+	tagsRes, err := c.Acm(region).ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{
 		CertificateArn: aws.String(arn),
 	})
 	if err != nil {

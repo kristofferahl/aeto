@@ -326,7 +326,7 @@ func (r *CertificateReconciler) reconcileDelete(ctx reconcile.Context, certifica
 
 	// Certificate
 	ctx.Log.Info("deleting AWS ACM Certificate", "region", r.AWS.Region(certificate.Spec.Region), "arn", ca)
-	_, err = r.AWS.RegionalAcm(certificate.Spec.Region).DeleteCertificate(ctx.Context, &acm.DeleteCertificateInput{
+	_, err = r.AWS.Acm(certificate.Spec.Region).DeleteCertificate(ctx.Context, &acm.DeleteCertificateInput{
 		CertificateArn: aws.String(ca),
 	})
 	if err != nil {
@@ -403,7 +403,7 @@ func (r *CertificateReconciler) newAcmCertificate(ctx reconcile.Context, certifi
 		req.Tags = tags
 	}
 
-	res, err := r.AWS.RegionalAcm(certificate.Spec.Region).RequestCertificate(ctx.Context, req)
+	res, err := r.AWS.Acm(certificate.Spec.Region).RequestCertificate(ctx.Context, req)
 	if err != nil {
 		return "", err
 	}
