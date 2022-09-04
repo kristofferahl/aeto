@@ -155,6 +155,7 @@ func main() {
 
 	awsClients := aws.Clients{
 		Log:     ctrl.Log.WithName("aws-client"),
+		Config:  awsConfig,
 		Acm:     acm.NewFromConfig(awsConfig),
 		Route53: route53.NewFromConfig(awsConfig),
 	}
