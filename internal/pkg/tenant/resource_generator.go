@@ -238,7 +238,7 @@ func (r *ResourceGenerator) newTemplateData(blueprint corev1alpha1.Blueprint, pa
 	return template.Data{
 		Name:         r.state.TenantName,
 		PrefixedName: r.state.TenantPrefixedName,
-		DisplayName:  r.state.TenantDisplayName,
+		FullName:     r.state.TenantFullName,
 		Namespaces: template.Namespaces{
 			Tenant:   r.state.TenantPrefixedNamespace,
 			Operator: config.Operator.Namespace,

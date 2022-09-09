@@ -7,7 +7,8 @@ import (
 func Events() []eventsource.Event {
 	return []eventsource.Event{
 		&TenantCreated{},
-		&TenantDisplayNameSet{},
+		&TenantDisplayNameSet{}, // Deprecated
+		&TenantFullNameSet{},
 		&BlueprintSet{},
 		&LabelsChanged{},
 		&AnnotationsChanged{},
@@ -35,7 +36,16 @@ type TenantCreated struct {
 	Namespace string `json:"namespace"`
 }
 
+// TenantDisplayNameSet represents the full name of a tenant
+//
+// Deprecated: Use TenantFullNameSet instead
 type TenantDisplayNameSet struct {
+	eventsource.EventModel
+	Name string `json:"name"`
+}
+
+// TenantFullNameSet represents the full name of a tenant
+type TenantFullNameSet struct {
 	eventsource.EventModel
 	Name string `json:"name"`
 }

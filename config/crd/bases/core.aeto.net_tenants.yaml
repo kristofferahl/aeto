@@ -73,7 +73,7 @@ spec:
                   the tenant
                 type: string
               name:
-                description: Name is the display name of the tenant
+                description: Name is the full name of the tenant
                 type: string
             required:
             - name

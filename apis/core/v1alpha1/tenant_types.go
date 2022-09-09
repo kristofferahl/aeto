@@ -29,7 +29,7 @@ type TenantSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Name is the display name of the tenant
+	// Name is the full name of the tenant
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 

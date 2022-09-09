@@ -15,9 +15,9 @@ type TenantAggregate struct {
 }
 
 type State struct {
-	TenantName        string
-	TenantNamespace   string
-	TenantDisplayName string
+	TenantName      string
+	TenantNamespace string
+	TenantFullName  string
 
 	BlueprintName      string
 	BlueprintNamespace string
@@ -65,9 +65,9 @@ func (a *TenantAggregate) Create(name string, namespace string) {
 	a.root.Apply(&TenantCreated{Name: name, Namespace: namespace})
 }
 
-func (a *TenantAggregate) SetDisplayName(name string) {
-	if a.state.TenantDisplayName != name {
-		a.root.Apply(&TenantDisplayNameSet{Name: name})
+func (a *TenantAggregate) SetFullName(name string) {
+	if a.state.TenantFullName != name {
+		a.root.Apply(&TenantFullNameSet{Name: name})
 	}
 }
 
@@ -186,7 +186,10 @@ func (s *State) On(e eventsource.Event) {
 		s.TenantNamespace = event.Namespace
 		break
 	case *TenantDisplayNameSet:
-		s.TenantDisplayName = event.Name
+		s.TenantFullName = event.Name
+		break
+	case *TenantFullNameSet:
+		s.TenantFullName = event.Name
 		break
 	case *BlueprintSet:
 		s.BlueprintName = event.Name

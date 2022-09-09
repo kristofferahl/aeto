@@ -11,7 +11,7 @@ import (
 type Data struct {
 	Name         string
 	PrefixedName string
-	DisplayName  string
+	FullName     string
 	Namespaces   Namespaces
 	Labels       map[string]string
 	Annotations  map[string]string

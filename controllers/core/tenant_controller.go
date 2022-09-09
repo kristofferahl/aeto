@@ -135,7 +135,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		t := domain.NewTenant(streamId)
 
 		t.Create(tenant.Name, tenant.Namespace)
-		t.SetDisplayName(tenant.Spec.Name)
+		t.SetFullName(tenant.Spec.Name)
 		t.SetBlueprint(tenant, blueprint)
 
 		events, err := store.Save(t)
@@ -153,7 +153,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		results = append(results, ReconcileRequeueRequest(rctx, stream))
 		results = append(results, ReconcileStatus(rctx, r.Client, tenant, stream))
 
-		t.SetDisplayName(tenant.Spec.Name)
+		t.SetFullName(tenant.Spec.Name)
 		t.SetBlueprint(tenant, blueprint)
 
 		generator := domain.NewResourceGenerator(rctx, domain.ResourceGeneratoreServices{Client: r.Client})
