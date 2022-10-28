@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1alpha1 contains API Schema definitions for the route53.aws v1alpha1 API group
-//+kubebuilder:object:generate=true
-//+groupName=route53.aws.aeto.net
+// +kubebuilder:object:generate=true
+// +groupName=route53.aws.aeto.net
 package v1alpha1
 
 import (
