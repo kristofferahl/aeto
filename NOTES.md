@@ -13,6 +13,7 @@ operator-sdk create api --group core --version v1alpha1 --kind ResourceSet --res
 operator-sdk create api --group route53.aws --version v1alpha1 --kind HostedZone --resource --controller
 operator-sdk create api --group acm.aws --version v1alpha1 --kind Certificate --resource --controller
 operator-sdk create api --group acm.aws --version v1alpha1 --kind CertificateConnector --resource --controller
+operator-sdk create api --group sustainability --version v1alpha1 --kind SavingsPolicy --resource --controller
 
 github.com/aws/aws-sdk-go-v2/service/acm
 github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2

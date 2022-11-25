@@ -80,4 +80,13 @@ resources:
   kind: EventStreamChunk
   path: github.com/kristofferahl/aeto/apis/event/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: aeto.net
+  group: sustainability
+  kind: SavingsPolicy
+  path: github.com/kristofferahl/aeto/apis/sustainability/v1alpha1
+  version: v1alpha1
 version: "3"

@@ -1,4 +1,3 @@
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -210,6 +209,32 @@ rules:
   - route53.aws.aeto.net
   resources:
   - hostedzones/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - sustainability.aeto.net
+  resources:
+  - savingspolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - sustainability.aeto.net
+  resources:
+  - savingspolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - sustainability.aeto.net
+  resources:
+  - savingspolicies/status
   verbs:
   - get
   - patch

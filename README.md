@@ -27,6 +27,10 @@ A Kubernetes "tenant" operator.
 
 - EventStreamChunk
 
+### Sustainability
+
+- SavingsPolicy
+
 ## Examples
 
 The `config/samples` and `config/default-resources` contains a working default setup with an example tenant.

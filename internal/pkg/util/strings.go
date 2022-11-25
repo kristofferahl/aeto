@@ -20,3 +20,13 @@ func SliceRemoveString(slice []string, s string) (result []string) {
 	}
 	return
 }
+
+// IndexOfString returns the index of the needle in the haystack
+func IndexOfString(needle string, haystack []string) int {
+	for k, v := range haystack {
+		if needle == v {
+			return k
+		}
+	}
+	return -1
+}

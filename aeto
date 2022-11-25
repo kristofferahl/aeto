@@ -54,6 +54,10 @@ print() {
   echo 'AWS ACM CertificateConnector'
   kubectl get certificateconnector -A -o wide
 
+  echo
+  echo 'Sustainability SavingsPolicy'
+  kubectl get savingspolicy -A -o wide
+
   if [[ ${all:?} == true ]]; then
     echo
     echo 'Deployment'
@@ -115,6 +119,19 @@ cleanup() {
   kubectl delete namespace tenant-example
 }
 
+setup() {
+  echo 'setting up local environment for development'
+  echo
+  kind create cluster
+  make install
+  kubectl create namespace aeto
+  echo
+  echo 'done setting up development environment'
+  echo 'next up:'
+  echo '  - make run'
+  echo '  - ./aeto apply'
+}
+
 watch() {
   while true; do
     clear && print && sleep 3
@@ -150,6 +167,7 @@ main() {
   watch) watch ;;
   events) events ;;
   release) release ;;
+  setup) setup ;;
   *) print --all ;;
   esac
 }

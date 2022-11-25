@@ -2,4 +2,5 @@
 resources:
   - acm.aws_v1alpha1_certificateconnector.yaml
   - core_v1alpha1_tenant.yaml
+  - sustainability_v1alpha1_savingspolicy.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

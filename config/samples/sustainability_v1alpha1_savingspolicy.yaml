@@ -1,0 +1,18 @@
+apiVersion: sustainability.aeto.net/v1alpha1
+kind: SavingsPolicy
+metadata:
+  name: savingspolicy-sample
+  namespace: tenant-example
+  # annotations:
+  #   sustainability.aeto.net/suspend-for: 30m
+  #   sustainability.aeto.net/suspend-until: "2022-11-24T21:00:00Z"
+spec:
+  suspended:
+    - "Mon-Fri 07:30-17:30 Europe/Stockholm"
+  targets:
+    - apiVersion: apps/v1
+      kind: Deployment
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: podinfo
+      ignore: true

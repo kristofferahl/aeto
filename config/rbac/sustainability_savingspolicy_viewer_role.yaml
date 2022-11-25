@@ -1,0 +1,27 @@
+# permissions for end users to view savingspolicies.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: savingspolicy-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: aeto
+    app.kubernetes.io/part-of: aeto
+    app.kubernetes.io/managed-by: kustomize
+  name: savingspolicy-viewer-role
+rules:
+- apiGroups:
+  - sustainability.aeto.net
+  resources:
+  - savingspolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - sustainability.aeto.net
+  resources:
+  - savingspolicies/status
+  verbs:
+  - get

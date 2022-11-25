@@ -48,10 +48,12 @@ import (
 	corev1alpha1 "github.com/kristofferahl/aeto/apis/core/v1alpha1"
 	eventv1alpha1 "github.com/kristofferahl/aeto/apis/event/v1alpha1"
 	route53awsv1alpha1 "github.com/kristofferahl/aeto/apis/route53.aws/v1alpha1"
+	sustainabilityv1alpha1 "github.com/kristofferahl/aeto/apis/sustainability/v1alpha1"
 	acmawscontrollers "github.com/kristofferahl/aeto/controllers/acm.aws"
 	corecontrollers "github.com/kristofferahl/aeto/controllers/core"
 	eventcontrollers "github.com/kristofferahl/aeto/controllers/event"
 	route53awscontrollers "github.com/kristofferahl/aeto/controllers/route53.aws"
+	sustainabilitycontrollers "github.com/kristofferahl/aeto/controllers/sustainability"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -67,6 +69,7 @@ func init() {
 	utilruntime.Must(route53awsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(acmawsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(eventv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(sustainabilityv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -111,6 +114,7 @@ func main() {
 		"Certificate",
 		"CertificateConnector",
 		"EventStreamChunk",
+		"SavingsPolicy",
 	}, ","))
 
 	enabledControllers := strings.Split(strings.TrimLeft(strings.TrimRight(operatorEnabledControllers, ","), ","), ",")
@@ -247,6 +251,16 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if util.SliceContainsString(enabledControllers, "SavingsPolicy") {
+		if err = (&sustainabilitycontrollers.SavingsPolicyReconciler{
+			Scheme: mgr.GetScheme(),
+			Client: k8sClient,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "SavingsPolicy")
+			os.Exit(1)
+		}
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
