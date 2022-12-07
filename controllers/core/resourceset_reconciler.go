@@ -217,6 +217,9 @@ func NewResourceSet() *corev1alpha1.ResourceSet {
 }
 
 func remove(slice corev1alpha1.ResourceSetResourceList, index int) corev1alpha1.ResourceSetResourceList {
+	if index < 0 {
+		return slice
+	}
 	return append(slice[:index], slice[index+1:]...)
 }
 

@@ -70,6 +70,9 @@ func (rl ResourceList) Find(id string) (index int, existing *Resource) {
 }
 
 func (rl ResourceList) Remove(index int) ResourceList {
+	if index < 0 {
+		return rl
+	}
 	return append(rl[:index], rl[index+1:]...)
 }
 

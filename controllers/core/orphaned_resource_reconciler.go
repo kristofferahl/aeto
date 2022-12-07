@@ -59,13 +59,13 @@ func (h *OrphanedResourceEventHandler) On(e eventsource.Event) {
 	case *tenant.ResourceAdded:
 		h.state.Active = append(h.state.Active, event.Resource)
 		index, _ := h.state.Deleted.Find(event.Resource.Id)
-		if index >= 0 {
-			h.state.Deleted = h.state.Deleted.Remove(index)
-		}
+		h.state.Deleted = h.state.Deleted.Remove(index)
 	case *tenant.ResourceRemoved:
 		index, r := h.state.Active.Find(event.ResourceId)
-		h.state.Active = h.state.Active.Remove(index)
-		h.state.Deleted = append(h.state.Deleted, *r)
+		if index >= 0 && r != nil {
+			h.state.Active = h.state.Active.Remove(index)
+			h.state.Deleted = append(h.state.Deleted, *r)
+		}
 	case *tenant.ResourceGenererationFailed:
 		h.state.DeleteAllowed = false
 	case *tenant.ResourceGenererationSuccessful:
