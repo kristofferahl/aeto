@@ -47,6 +47,14 @@ func (e *GenerateError) Error() string {
 	return fmt.Sprintf("failed to generate resources from blueprint, encountered %d error(s)", len(e.Errors))
 }
 
+func (e *GenerateError) ErrorMessages() []string {
+	errors := make([]string, 0)
+	for i, err := range e.Errors {
+		errors = append(errors, fmt.Sprintf("%d) %s ;", i+1, err.Error()))
+	}
+	return errors
+}
+
 type sum struct {
 	BlueprintName string
 	Resources     []resourceSum
@@ -128,9 +136,11 @@ func (r *ResourceGenerator) Generate(state State, blueprint corev1alpha1.Bluepri
 	}
 
 	if len(errors) > 0 {
-		err = &GenerateError{
+		ge := &GenerateError{
 			Errors: errors,
 		}
+		r.ctx.Log.V(1).Info(ge.Error(), "errors", ge.ErrorMessages())
+		err = ge
 	}
 
 	return result, err
