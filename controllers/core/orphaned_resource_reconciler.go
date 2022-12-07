@@ -5,8 +5,6 @@ import (
 	"github.com/kristofferahl/aeto/internal/pkg/kubernetes"
 	"github.com/kristofferahl/aeto/internal/pkg/reconcile"
 	"github.com/kristofferahl/aeto/internal/pkg/tenant"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -50,11 +48,6 @@ type orhanedResourceState struct {
 	Active        tenant.ResourceList
 }
 
-type orphanedResource struct {
-	NamespacedName   types.NamespacedName
-	GroupVersionKind schema.GroupVersionKind
-}
-
 func NewOrphanedResourceEventHandler(state *orhanedResourceState) eventsource.EventHandler {
 	return &OrphanedResourceEventHandler{
 		state: state,
@@ -69,17 +62,13 @@ func (h *OrphanedResourceEventHandler) On(e eventsource.Event) {
 		if index >= 0 {
 			h.state.Deleted = h.state.Deleted.Remove(index)
 		}
-		break
 	case *tenant.ResourceRemoved:
 		index, r := h.state.Active.Find(event.ResourceId)
 		h.state.Active = h.state.Active.Remove(index)
 		h.state.Deleted = append(h.state.Deleted, *r)
-		break
 	case *tenant.ResourceGenererationFailed:
 		h.state.DeleteAllowed = false
-		break
 	case *tenant.ResourceGenererationSuccessful:
 		h.state.DeleteAllowed = true
-		break
 	}
 }

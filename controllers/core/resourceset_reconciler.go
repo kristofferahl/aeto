@@ -52,7 +52,7 @@ func ReconcileResourceSet(ctx reconcile.Context, k8s kubernetes.Client, stream e
 
 	// Ensures the active resource set is the last to be applied
 	sort.Slice(sets[:], func(i, j int) bool {
-		return sets[i].Spec.Active == false
+		return !sets[i].Spec.Active
 	})
 
 	ctx.Log.V(2).Info("replayed events onto ResourceSets", "count", len(state.ResourceSets), "active", active, "resource-sets", sets)
@@ -145,10 +145,8 @@ func (h *ResourceSetEventHandler) On(e eventsource.Event) {
 	switch event := e.(type) {
 	case *tenant.LabelsChanged:
 		h.state.Labels = event.Labels
-		break
 	case *tenant.AnnotationsChanged:
 		h.state.Annotations = event.Annotations
-		break
 	case *tenant.ResourceSetCreated:
 		current := h.state.ResourceSets[h.state.Current]
 		if current != nil {
@@ -165,7 +163,6 @@ func (h *ResourceSetEventHandler) On(e eventsource.Event) {
 				Annotations: h.state.Annotations,
 			}
 		})
-		break
 	case *tenant.ResourceAdded:
 		h.onCurrentResourceSet(func(rs *corev1alpha1.ResourceSet) {
 			rs.Spec.Resources = append(rs.Spec.Resources, corev1alpha1.ResourceSetResource{
@@ -178,7 +175,6 @@ func (h *ResourceSetEventHandler) On(e eventsource.Event) {
 				},
 			})
 		})
-		break
 	case *tenant.ResourceUpdated:
 		h.onCurrentResourceSet(func(rs *corev1alpha1.ResourceSet) {
 			i, r := rs.Spec.Resources.Find(event.Resource.Id)
@@ -190,23 +186,19 @@ func (h *ResourceSetEventHandler) On(e eventsource.Event) {
 			}
 			rs.Spec.Resources[i] = *r
 		})
-		break
 	case *tenant.ResourceRemoved:
 		h.onCurrentResourceSet(func(rs *corev1alpha1.ResourceSet) {
 			i, _ := rs.Spec.Resources.Find(event.ResourceId)
 			rs.Spec.Resources = remove(rs.Spec.Resources, i)
 		})
-		break
 	case *tenant.ResourceSetActivated:
 		h.onResourceSet(event.Name, func(rs *corev1alpha1.ResourceSet) {
 			rs.Spec.Active = true
 		})
-		break
 	case *tenant.ResourceSetDeactivated:
 		h.onResourceSet(event.Name, func(rs *corev1alpha1.ResourceSet) {
 			rs.Spec.Active = false
 		})
-		break
 	}
 
 	for _, rs := range h.state.ResourceSets {

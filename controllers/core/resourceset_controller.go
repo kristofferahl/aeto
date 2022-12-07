@@ -283,13 +283,10 @@ func (r *ResourceSetReconciler) reconcileStatus(ctx reconcile.Context, resourceS
 			readyReason = "ResourcesReady"
 		}
 		readyMsg = fmt.Sprintf("%d/%d (%d)", readyCount, desiredCount, totalCount)
-		break
 	case corev1alpha1.ResourceSetPaused:
 		readyStatus = metav1.ConditionUnknown
-		break
 	case corev1alpha1.ResourceSetTerminating:
 		readyStatus = metav1.ConditionFalse
-		break
 	}
 
 	readyCondition := metav1.Condition{

@@ -149,7 +149,7 @@ func (a *TenantAggregate) GenerateResources(g ResourceGenerator, t v1alpha1.Tena
 		}
 	}
 
-	if a.state.ResourceSetActive[a.state.ResourceSetName] == false {
+	if !a.state.ResourceSetActive[a.state.ResourceSetName] {
 		a.root.Apply(&ResourceSetActivated{Name: a.state.ResourceSetName})
 	}
 
@@ -184,61 +184,44 @@ func (s *State) On(e eventsource.Event) {
 	case *TenantCreated:
 		s.TenantName = event.Name
 		s.TenantNamespace = event.Namespace
-		break
 	case *TenantDisplayNameSet:
 		s.TenantFullName = event.Name
-		break
 	case *TenantFullNameSet:
 		s.TenantFullName = event.Name
-		break
 	case *BlueprintSet:
 		s.BlueprintName = event.Name
 		s.BlueprintNamespace = event.Namespace
-		break
 	case *LabelsChanged:
 		s.Labels = event.Labels
-		break
 	case *AnnotationsChanged:
 		s.Annotations = event.Annotations
-		break
 	case *ResourceNamespaceNameChanged:
 		s.TenantPrefixedName = event.Name
 		s.TenantPrefixedNamespace = event.Namespace
-		break
 	case *ResourceGenererationFailed:
 		s.ResourceGenerationFailed = true
 		s.ResourceGenerationSum = event.Sum
-		break
 	case *ResourceGenererationSuccessful:
 		s.ResourceGenerationFailed = false
 		s.ResourceGenerationSum = event.Sum
-		break
 	case *ResourceSetVersionChanged:
 		s.ResourceSetVersion = event.Version
-		break
 	case *ResourceSetCreated:
 		s.ResourceSetName = event.Name
 		s.ResourceSetNamespace = event.Namespace
-		break
 	case *ResourceAdded:
 		s.Resources = append(s.Resources, event.Resource)
-		break
 	case *ResourceUpdated:
 		index, _ := s.Resources.Find(event.Resource.Id)
-		s.Resources[index] = *&event.Resource
-		break
+		s.Resources[index] = event.Resource
 	case *ResourceRemoved:
 		index, _ := s.Resources.Find(event.ResourceId)
 		s.Resources = s.Resources.Remove(index)
-		break
 	case *ResourceSetActivated:
 		s.ResourceSetActive[event.Name] = true
-		break
 	case *ResourceSetDeactivated:
 		s.ResourceSetActive[event.Name] = false
-		break
 	case *TenantDeleted:
 		s.Deleted = true
-		break
 	}
 }

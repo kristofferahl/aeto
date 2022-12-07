@@ -175,14 +175,6 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return rctx.Complete(results...)
 }
 
-func (r *TenantReconciler) getBlueprint(ctx reconcile.Context, nn types.NamespacedName) (corev1alpha1.Blueprint, error) {
-	var blueprint corev1alpha1.Blueprint
-	if err := r.Get(ctx, nn, &blueprint); err != nil {
-		return corev1alpha1.Blueprint{}, err
-	}
-	return blueprint, nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &eventv1alpha1.EventStreamChunk{}, eventstore.StreamIdFieldIndexKey, func(o client.Object) []string {

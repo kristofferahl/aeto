@@ -111,19 +111,16 @@ func (h *TenantStatusEventHandler) On(e eventsource.Event) {
 		h.state.Status = ConditionTypeReconciling
 	case *tenant.ResourceNamespaceNameChanged:
 		h.state.Namespace = event.Namespace
-		break
 	case *tenant.BlueprintSet:
 		h.state.Blueprint = types.NamespacedName{
 			Namespace: event.Namespace,
 			Name:      event.Name,
 		}.String()
-		break
 	case *tenant.ResourceSetCreated:
 		h.state.ResourceSet = types.NamespacedName{
 			Namespace: event.Namespace,
 			Name:      event.Name,
 		}.String()
-		break
 	case *tenant.TenantDeleted:
 		reconcilingCondition := metav1.Condition{
 			Type:    ConditionTypeReconciling,
@@ -147,7 +144,6 @@ func (h *TenantStatusEventHandler) On(e eventsource.Event) {
 		}
 		apimeta.SetStatusCondition(&h.state.Conditions, terminatingCondition)
 		h.state.Status = ConditionTypeTerminating
-		break
 	}
 
 	h.state.Events++
