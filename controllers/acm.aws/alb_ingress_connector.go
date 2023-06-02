@@ -2,6 +2,7 @@ package acmaws
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	networkingv1 "k8s.io/api/networking/v1"
@@ -63,11 +64,14 @@ func (c AlbIngressControllerConnector) Connect(ctx reconcile.Context, certificat
 		certArnAnnotationValue := ingress.Annotations[AlbIngressControllerIngressAnnotation_CertificateArnKey]
 
 		if operatorControlledAnnotationValue != "true" {
-			ctx.Log.Info("Ingress not controlled by operator, missing annotation aeto.net/controlled", "namespace", ingress.Namespace, "name", ingress.Name, "annotations", ingress.GetAnnotations())
+			ctx.Log.Info("ingress not controlled by operator, missing annotation aeto.net/controlled", "namespace", ingress.Namespace, "name", ingress.Name, "annotations", ingress.GetAnnotations())
 			continue
 		}
 
 		arns := strings.Split(operatorStaticCertArnAnnotationValue, ",")
+
+		// NOTE: Must be sorted to avoid order affecting value of "changed" but we don't need to sort the statically defined certificate arns
+		sort.Strings(certificateArns)
 
 		for _, certificateArn := range certificateArns {
 			if !util.SliceContainsString(arns, certificateArn) {
