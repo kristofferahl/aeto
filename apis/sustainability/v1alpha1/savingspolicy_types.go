@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -113,4 +114,12 @@ type SavingsPolicyList struct {
 
 func init() {
 	SchemeBuilder.Register(&SavingsPolicy{}, &SavingsPolicyList{})
+}
+
+// NamespacedName returns a namespaced name for the custom resource
+func (sp SavingsPolicy) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: sp.Namespace,
+		Name:      sp.Name,
+	}
 }

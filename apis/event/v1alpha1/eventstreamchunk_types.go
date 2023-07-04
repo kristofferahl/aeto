@@ -20,6 +20,7 @@ import (
 	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -84,6 +85,14 @@ func (l EventStreamChunkList) Sort() []EventStreamChunk {
 		return l.Items[i].Spec.StreamVersion < l.Items[j].Spec.StreamVersion
 	})
 	return l.Items
+}
+
+// NamespacedName returns a namespaced name for the custom resource
+func (esc EventStreamChunk) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: esc.Namespace,
+		Name:      esc.Name,
+	}
 }
 
 func init() {
